@@ -65,6 +65,14 @@ impl Token {
             line,
         }
     }
+
+    pub fn lexeme(&self) -> &str {
+        &self.lexeme
+    }
+
+    pub fn token_type(&self) -> &TokenType {
+        &self.token_type
+    }
 }
 
 impl Display for Token {

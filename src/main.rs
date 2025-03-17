@@ -1,8 +1,11 @@
+mod expression;
 mod scanner;
 mod token;
 mod utf8;
 
+use crate::expression::Expression;
 use crate::scanner::Scanner;
+use crate::token::Token;
 use std::cell::RefCell;
 use std::io::Result as IOResult;
 use std::path::Path;
@@ -12,6 +15,17 @@ static mut HAD_ERROR: RefCell<bool> = RefCell::new(false);
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
+
+    let expression = Expression::Binary {
+        left: Box::new(Expression::Unary(
+            Token::new(token::TokenType::Minus, String::from("-"), 1),
+            Box::new(Expression::Number(123.0)),
+        )),
+        operator: Token::new(token::TokenType::Star, String::from("*"), 1),
+        right: Box::new(Expression::Grouping(Box::new(Expression::Number(45.47)))),
+    };
+
+    println!("{expression:?}");
 
     if args.len() > 1 {
         println!("Usage: lox [script]");
