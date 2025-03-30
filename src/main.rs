@@ -1,10 +1,13 @@
 mod expression;
+mod interpreter;
 mod parser;
 mod scanner;
+mod statement;
 mod token;
 mod utf8;
 
 use crate::expression::Expression;
+use crate::interpreter::{Interpreter, InterpreterError};
 use crate::parser::Parser;
 use crate::scanner::Scanner;
 use std::cell::RefCell;
@@ -13,6 +16,7 @@ use std::path::Path;
 use std::process::ExitCode;
 
 static mut HAD_ERROR: RefCell<bool> = RefCell::new(false);
+static mut HAD_RUNTIME_ERROR: RefCell<bool> = RefCell::new(false);
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
@@ -49,7 +53,11 @@ fn run(source: &str) {
         }
     };
 
-    println!("Expression: {expression:?}");
+    let interpreter = Interpreter::new();
+    match interpreter.interpret(&expression) {
+        Ok(result) => println!("{result}"),
+        Err(e) => runtime_error(e),
+    };
 }
 
 fn run_file(path: impl AsRef<Path>) {
@@ -71,6 +79,7 @@ fn run_prompt() -> IOResult<()> {
         run(&line);
         unsafe {
             HAD_ERROR.replace(false);
+            HAD_RUNTIME_ERROR.replace(false);
         }
     }
 
@@ -79,6 +88,13 @@ fn run_prompt() -> IOResult<()> {
 
 fn error(line: usize, message: &str) {
     report(line, "", message);
+}
+
+fn runtime_error(error: InterpreterError) {
+    println!("{error}");
+    unsafe {
+        HAD_RUNTIME_ERROR.replace(true);
+    }
 }
 
 fn report(line: usize, s_where: &str, message: &str) {
