@@ -1,4 +1,5 @@
 use crate::expression::Expression;
+use crate::statement::Statement;
 use crate::token::{Token, TokenType};
 use std::fmt::{Display, Formatter};
 
@@ -61,8 +62,25 @@ impl Interpreter {
         Self {}
     }
 
-    pub fn interpret<'a>(&'a self, expression: &'a Expression) -> InterpreterResult<'a, LoxType> {
-        self.evaluate(expression)
+    pub fn interpret<'a>(&'a self, statements: &'a [Statement]) -> InterpreterResult<()> {
+        for statement in statements {
+            self.execute_statement(statement)?;
+        }
+        Ok(())
+    }
+
+    fn execute_statement<'a>(&'a self, statement: &'a Statement) -> InterpreterResult<'a, ()> {
+        match statement {
+            Statement::Expression(expr) => {
+                self.evaluate(expr)?;
+            }
+            Statement::Print(expr) => {
+                let result = self.evaluate(expr)?;
+                println!("{result}");
+            }
+            Statement::Declaration { name, initializer } => todo!(),
+        }
+        Ok(())
     }
 
     fn evaluate<'a>(&'a self, expression: &'a Expression) -> InterpreterResult<'a, LoxType> {
@@ -79,6 +97,7 @@ impl Interpreter {
                 operator,
                 right,
             } => self.evaluate_binary(left, operator, right),
+            Expression::Var(_name) => todo!(),
         }
     }
 

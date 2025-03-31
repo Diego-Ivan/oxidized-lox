@@ -1,3 +1,4 @@
+use crate::statement::Statement;
 use crate::token::{Token, TokenType};
 use crate::Expression;
 use thiserror::Error;
@@ -6,7 +7,7 @@ use thiserror::Error;
 pub enum ParserError {
     #[error("Expected: {0:?}")]
     FailedMatch(TokenType),
-    #[error("Expected expression")]
+    #[error("Expected token: {0:?}.")]
     ExpectExpression(Token),
 }
 
@@ -33,9 +34,94 @@ macro_rules! match_token {
     };
 }
 
+macro_rules! consume_token {
+    ($parser: ident, $pattern: pat, $error: expr) => {
+        match $parser.peek() {
+            Some(next_token) => {
+                if matches!(next_token.token_type(), $pattern) {
+                    $parser.advance();
+                    Ok(*next_token)
+                } else {
+                    Err($error)
+                }
+            }
+            None => Err($error),
+        }
+    };
+}
+
 impl<'a> Parser<'a> {
     pub fn new(tokens: &'a [Token]) -> Self {
         Self { tokens, current: 0 }
+    }
+
+    pub fn statements(&mut self) -> ParserResult<Vec<Statement>> {
+        let mut statements = Vec::new();
+        while !self.is_at_end() {
+            statements.push(self.declaration()?);
+        }
+        Ok(statements)
+    }
+
+    fn declaration(&mut self) -> ParserResult<Statement> {
+        if match_token!(self, TokenType::Var) {
+            /* Synchronize if parsing a variable declaration failed */
+            self.variable_declaration()
+                .inspect_err(|_| self.synchronize())
+        } else {
+            self.parse_statement()
+        }
+    }
+
+    fn variable_declaration(&mut self) -> ParserResult<Statement> {
+        let current_token = self.peek().unwrap();
+        let name = if let TokenType::Identifier(ident) = current_token.token_type() {
+            let ident = ident.clone();
+            self.advance();
+            ident
+        } else {
+            return Err(ParserError::FailedMatch(TokenType::Identifier(
+                String::new(),
+            )));
+        };
+
+        let initializer = if match_token!(self, TokenType::Equal) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        if match_token!(self, TokenType::Semicolon) {
+            Ok(Statement::Declaration { name, initializer })
+        } else {
+            Err(ParserError::FailedMatch(TokenType::Semicolon))
+        }
+    }
+
+    fn parse_statement(&mut self) -> ParserResult<Statement> {
+        if match_token!(self, TokenType::Print) {
+            self.parse_print_statement()
+        } else {
+            self.parse_expression_statement()
+        }
+    }
+
+    fn parse_expression_statement(&mut self) -> ParserResult<Statement> {
+        let expression = self.expression()?;
+        if match_token!(self, TokenType::Semicolon) {
+            Ok(Statement::Expression(expression))
+        } else {
+            Err(ParserError::FailedMatch(TokenType::Semicolon))
+        }
+    }
+
+    fn parse_print_statement(&mut self) -> ParserResult<Statement> {
+        let expression = self.expression()?;
+        if match_token!(self, TokenType::Semicolon) {
+            Ok(Statement::Print(expression))
+        } else {
+            Err(ParserError::FailedMatch(TokenType::Semicolon))
+        }
     }
 
     pub fn parse(&mut self) -> ParserResult<Expression> {
@@ -167,6 +253,11 @@ impl<'a> Parser<'a> {
                 self.advance();
                 Ok(expr)
             }
+            TokenType::Identifier(name) => {
+                let expression = Expression::Var(name.clone());
+                self.advance();
+                Ok(expression)
+            }
             TokenType::LeftParen => {
                 self.advance();
 
@@ -196,12 +287,31 @@ impl<'a> Parser<'a> {
             Some(&self.tokens[self.current - 1])
         }
     }
-
     fn is_at_end(&self) -> bool {
         matches!(self.tokens[self.current].token_type(), TokenType::Eof)
     }
 
     fn peek(&self) -> Option<&Token> {
         self.tokens.get(self.current)
+    }
+
+    fn synchronize(&mut self) {
+        use TokenType::*;
+
+        self.advance();
+
+        while !self.is_at_end() {
+            if let Some(token) = self.previous() {
+                if matches!(token.token_type(), Semicolon) {
+                    return;
+                }
+            }
+
+            let next = self.peek().unwrap().token_type();
+            if matches!(next, Class | Fun | Var | For | If | While | Print | Return) {
+                return;
+            }
+        }
+        self.advance();
     }
 }

@@ -9,6 +9,7 @@ pub enum Expression {
     },
     Grouping(Box<Expression>),
     Unary(Token, Box<Expression>),
+    Var(String),
 
     // Literals
     True,
@@ -50,6 +51,7 @@ impl Debug for Expression {
             } => parenthesize(f, operator.lexeme(), &[left, right]),
             Expression::Grouping(expr) => parenthesize(f, "group", &[expr]),
             Expression::Unary(token, expr) => parenthesize(f, token.lexeme(), &[expr]),
+            Expression::Var(name) => write!(f, "Var({name})"),
         }
     }
 }

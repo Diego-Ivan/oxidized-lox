@@ -45,8 +45,8 @@ fn run(source: &str) {
     let tokens = scanner.scan_tokens();
 
     let mut parser = Parser::new(tokens);
-    let expression = match parser.parse() {
-        Ok(expression) => expression,
+    let statements = match parser.statements() {
+        Ok(stmts) => stmts,
         Err(e) => {
             eprintln!("{e}");
             return;
@@ -54,10 +54,9 @@ fn run(source: &str) {
     };
 
     let interpreter = Interpreter::new();
-    match interpreter.interpret(&expression) {
-        Ok(result) => println!("{result}"),
-        Err(e) => runtime_error(e),
-    };
+    if let Err(e) = interpreter.interpret(&statements) {
+        runtime_error(e);
+    }
 }
 
 fn run_file(path: impl AsRef<Path>) {
