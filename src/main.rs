@@ -2,7 +2,6 @@ mod expression;
 mod interpreter;
 mod parser;
 mod scanner;
-mod statement;
 mod token;
 mod utf8;
 

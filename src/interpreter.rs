@@ -1,60 +1,13 @@
+mod environment;
+mod error;
+pub mod statement;
+mod value;
+
 use crate::expression::Expression;
-use crate::statement::Statement;
 use crate::token::{Token, TokenType};
-use std::fmt::{Display, Formatter};
-
-#[derive(Debug)]
-pub struct InterpreterError<'a> {
-    error_type: InterpreterErrorType<'a>,
-    token: &'a Token,
-}
-
-impl<'a> Display for InterpreterError<'a> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let err_message = match &self.error_type {
-            InterpreterErrorType::WrongUnaryOperands(op, t) => {
-                format!("The unary operation {op:?} is not valid over token of type: {t}")
-            }
-            InterpreterErrorType::DivisionByZero => String::from("Division by zero"),
-            InterpreterErrorType::WrongBinaryOperands(t1, op, t2) => {
-                format!("Operation of type: {op:?} cannot be applied over operands of types {t1:?} and {t2:?}")
-            }
-        };
-
-        write!(f, "{err_message}\n[line {}]", self.token.line())
-    }
-}
-
-impl<'a> std::error::Error for InterpreterError<'a> {}
-
-#[derive(Debug)]
-pub enum InterpreterErrorType<'a> {
-    WrongUnaryOperands(&'a TokenType, LoxType),
-    WrongBinaryOperands(LoxType, &'a TokenType, LoxType),
-    DivisionByZero,
-}
-
-pub type InterpreterResult<'a, T> = Result<T, InterpreterError<'a>>;
-
-#[derive(Debug)]
-pub enum LoxType {
-    Nil,
-    Boolean(bool),
-    Number(f64),
-    String(String),
-}
-
-impl Display for LoxType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Nil => write!(f, "nil"),
-            Self::Boolean(b) => write!(f, "{b}"),
-            Self::Number(n) => write!(f, "{n}"),
-            Self::String(str) => write!(f, "\"{str}\""),
-        }
-    }
-}
-
+pub use error::*;
+pub use statement::Statement;
+pub use value::LoxValue;
 pub struct Interpreter;
 
 impl Interpreter {
@@ -62,7 +15,7 @@ impl Interpreter {
         Self {}
     }
 
-    pub fn interpret<'a>(&'a self, statements: &'a [Statement]) -> InterpreterResult<()> {
+    pub fn interpret<'a>(&'a self, statements: &'a [Statement]) -> InterpreterResult<'a, ()> {
         for statement in statements {
             self.execute_statement(statement)?;
         }
@@ -83,13 +36,13 @@ impl Interpreter {
         Ok(())
     }
 
-    fn evaluate<'a>(&'a self, expression: &'a Expression) -> InterpreterResult<'a, LoxType> {
+    fn evaluate<'a>(&'a self, expression: &'a Expression) -> InterpreterResult<'a, LoxValue> {
         match expression {
-            Expression::True => Ok(LoxType::Boolean(true)),
-            Expression::False => Ok(LoxType::Boolean(false)),
-            Expression::Number(num) => Ok(LoxType::Number(*num)),
-            Expression::String(str) => Ok(LoxType::String(str.to_string())),
-            Expression::Nil => Ok(LoxType::Nil),
+            Expression::True => Ok(LoxValue::Boolean(true)),
+            Expression::False => Ok(LoxValue::Boolean(false)),
+            Expression::Number(num) => Ok(LoxValue::Number(*num)),
+            Expression::String(str) => Ok(LoxValue::String(str.to_string())),
+            Expression::Nil => Ok(LoxValue::Nil),
             Expression::Grouping(expr) => self.evaluate(expr),
             Expression::Unary(token, expression) => self.evaluate_unary(token, expression),
             Expression::Binary {
@@ -105,20 +58,20 @@ impl Interpreter {
         &'a self,
         token: &'a Token,
         expression: &'a Expression,
-    ) -> InterpreterResult<'a, LoxType> {
+    ) -> InterpreterResult<'a, LoxValue> {
         match (token.token_type(), self.evaluate(expression)?) {
             /* Numerical negation */
-            (TokenType::Minus, LoxType::Number(num)) => Ok(LoxType::Number(-num)),
+            (TokenType::Minus, LoxValue::Number(num)) => Ok(LoxValue::Number(-num)),
 
             /* Boolean negation */
-            (TokenType::Bang, LoxType::Boolean(value)) => Ok(LoxType::Boolean(!value)),
+            (TokenType::Bang, LoxValue::Boolean(value)) => Ok(LoxValue::Boolean(!value)),
 
             /* nil will be considered a falsy value */
-            (TokenType::Bang, LoxType::Nil) => Ok(LoxType::Boolean(true)),
+            (TokenType::Bang, LoxValue::Nil) => Ok(LoxValue::Boolean(true)),
             /* Zero is a falsy value */
-            (TokenType::Bang, LoxType::Number(0.0)) => Ok(LoxType::Boolean(true)),
+            (TokenType::Bang, LoxValue::Number(0.0)) => Ok(LoxValue::Boolean(true)),
             /* Any other number is truthy */
-            (TokenType::Bang, LoxType::Number(_)) => Ok(LoxType::Boolean(false)),
+            (TokenType::Bang, LoxValue::Number(_)) => Ok(LoxValue::Boolean(false)),
             (op, expr) => Err(InterpreterError {
                 error_type: InterpreterErrorType::WrongUnaryOperands(op, expr),
                 token,
@@ -131,62 +84,66 @@ impl Interpreter {
         first_operand: &'a Expression,
         operator: &'a Token,
         second_operand: &'a Expression,
-    ) -> InterpreterResult<'a, LoxType> {
+    ) -> InterpreterResult<'a, LoxValue> {
         match (
             self.evaluate(first_operand)?,
             operator.token_type(),
             self.evaluate(second_operand)?,
         ) {
             /* Algebraic operations */
-            (LoxType::Number(a), TokenType::Plus, LoxType::Number(b)) => Ok(LoxType::Number(a + b)),
-            (LoxType::Number(a), TokenType::Minus, LoxType::Number(b)) => {
-                Ok(LoxType::Number(a - b))
+            (LoxValue::Number(a), TokenType::Plus, LoxValue::Number(b)) => {
+                Ok(LoxValue::Number(a + b))
             }
-            (LoxType::Number(a), TokenType::Star, LoxType::Number(b)) => Ok(LoxType::Number(a * b)),
+            (LoxValue::Number(a), TokenType::Minus, LoxValue::Number(b)) => {
+                Ok(LoxValue::Number(a - b))
+            }
+            (LoxValue::Number(a), TokenType::Star, LoxValue::Number(b)) => {
+                Ok(LoxValue::Number(a * b))
+            }
 
             /* Handle division by zero */
-            (LoxType::Number(a), TokenType::Slash, LoxType::Number(0f64)) => {
+            (LoxValue::Number(a), TokenType::Slash, LoxValue::Number(0f64)) => {
                 Err(InterpreterError {
                     error_type: InterpreterErrorType::DivisionByZero,
                     token: operator,
                 })
             }
-            (LoxType::Number(a), TokenType::Slash, LoxType::Number(b)) => {
-                Ok(LoxType::Number(a / b))
+            (LoxValue::Number(a), TokenType::Slash, LoxValue::Number(b)) => {
+                Ok(LoxValue::Number(a / b))
             }
 
             /* Logical comparisons */
-            (LoxType::Number(a), TokenType::EqualEqual, LoxType::Number(b)) => {
-                Ok(LoxType::Boolean(a == b))
+            (LoxValue::Number(a), TokenType::EqualEqual, LoxValue::Number(b)) => {
+                Ok(LoxValue::Boolean(a == b))
             }
-            (LoxType::Number(a), TokenType::GreaterEqual, LoxType::Number(b)) => {
-                Ok(LoxType::Boolean(a >= b))
+            (LoxValue::Number(a), TokenType::GreaterEqual, LoxValue::Number(b)) => {
+                Ok(LoxValue::Boolean(a >= b))
             }
-            (LoxType::Number(a), TokenType::Greater, LoxType::Number(b)) => {
-                Ok(LoxType::Boolean(a > b))
+            (LoxValue::Number(a), TokenType::Greater, LoxValue::Number(b)) => {
+                Ok(LoxValue::Boolean(a > b))
             }
-            (LoxType::Number(a), TokenType::LessEqual, LoxType::Number(b)) => {
-                Ok(LoxType::Boolean(a <= b))
+            (LoxValue::Number(a), TokenType::LessEqual, LoxValue::Number(b)) => {
+                Ok(LoxValue::Boolean(a <= b))
             }
-            (LoxType::Number(a), TokenType::Less, LoxType::Number(b)) => {
-                Ok(LoxType::Boolean(a < b))
+            (LoxValue::Number(a), TokenType::Less, LoxValue::Number(b)) => {
+                Ok(LoxValue::Boolean(a < b))
             }
 
             /* Boolean operations */
-            (LoxType::Boolean(a), TokenType::Or, LoxType::Boolean(b)) => {
-                Ok(LoxType::Boolean(a || b))
+            (LoxValue::Boolean(a), TokenType::Or, LoxValue::Boolean(b)) => {
+                Ok(LoxValue::Boolean(a || b))
             }
-            (LoxType::Boolean(a), TokenType::And, LoxType::Boolean(b)) => {
-                Ok(LoxType::Boolean(a && b))
+            (LoxValue::Boolean(a), TokenType::And, LoxValue::Boolean(b)) => {
+                Ok(LoxValue::Boolean(a && b))
             }
 
             /* String operations */
-            (LoxType::String(mut s1), TokenType::Plus, LoxType::String(s2)) => {
+            (LoxValue::String(mut s1), TokenType::Plus, LoxValue::String(s2)) => {
                 s1.push_str(&s2);
-                Ok(LoxType::String(s1))
+                Ok(LoxValue::String(s1))
             }
-            (LoxType::String(s1), TokenType::Plus, any) => {
-                Ok(LoxType::String(format!("{s1}{any}")))
+            (LoxValue::String(s1), TokenType::Plus, any) => {
+                Ok(LoxValue::String(format!("{s1}{any}")))
             }
 
             /* Any other invalid operation will be handled here. */

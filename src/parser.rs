@@ -1,4 +1,4 @@
-use crate::statement::Statement;
+use crate::interpreter::statement::Statement;
 use crate::token::{Token, TokenType};
 use crate::Expression;
 use thiserror::Error;
