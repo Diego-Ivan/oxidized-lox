@@ -31,6 +31,7 @@ pub enum InterpreterErrorType<'a> {
     WrongUnaryOperands(&'a TokenType, LoxValue),
     WrongBinaryOperands(LoxValue, &'a TokenType, LoxValue),
     DivisionByZero,
+    UndefinedVariable(String),
 }
 
 pub type InterpreterResult<'a, T> = Result<T, InterpreterError<'a>>;

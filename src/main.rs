@@ -1,5 +1,6 @@
 mod expression;
 mod interpreter;
+mod once_cell;
 mod parser;
 mod scanner;
 mod token;

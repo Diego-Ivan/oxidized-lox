@@ -4,15 +4,22 @@ pub mod statement;
 mod value;
 
 use crate::expression::Expression;
+use crate::interpreter::environment::Environment;
 use crate::token::{Token, TokenType};
 pub use error::*;
 pub use statement::Statement;
+use std::cell::RefCell;
 pub use value::LoxValue;
-pub struct Interpreter;
+
+pub struct Interpreter {
+    environment: RefCell<Option<Environment>>,
+}
 
 impl Interpreter {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            environment: RefCell::new(Some(Environment::new())),
+        }
     }
 
     pub fn interpret<'a>(&'a self, statements: &'a [Statement]) -> InterpreterResult<'a, ()> {
@@ -31,7 +38,15 @@ impl Interpreter {
                 let result = self.evaluate(expr)?;
                 println!("{result}");
             }
-            Statement::Declaration { name, initializer } => todo!(),
+            Statement::Declaration { name, initializer } => {
+                let initial = match initializer.as_ref() {
+                    Some(initializer) => self.evaluate(initializer)?,
+                    None => LoxValue::Nil,
+                };
+                let mut env = self.environment.borrow_mut();
+                let env = env.as_mut().unwrap();
+                env.define(name.to_string(), initial);
+            }
         }
         Ok(())
     }
@@ -50,7 +65,7 @@ impl Interpreter {
                 operator,
                 right,
             } => self.evaluate_binary(left, operator, right),
-            Expression::Var(_name) => todo!(),
+            Expression::Var(name) => {}
         }
     }
 
@@ -102,7 +117,7 @@ impl Interpreter {
             }
 
             /* Handle division by zero */
-            (LoxValue::Number(a), TokenType::Slash, LoxValue::Number(0f64)) => {
+            (LoxValue::Number(_), TokenType::Slash, LoxValue::Number(0f64)) => {
                 Err(InterpreterError {
                     error_type: InterpreterErrorType::DivisionByZero,
                     token: operator,
