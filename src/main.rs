@@ -26,9 +26,10 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
+    let interpreter = Interpreter::new();
     match args.get(1) {
         Some(script) => run_file(script),
-        None => run_prompt().unwrap(),
+        None => run_prompt(&interpreter).unwrap(),
     }
 
     unsafe {
@@ -40,7 +41,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(source: &str) {
+fn run(source: &str, interpreter: &Interpreter) {
     let mut scanner = Scanner::new(source);
     let tokens = scanner.scan_tokens();
 
@@ -53,7 +54,6 @@ fn run(source: &str) {
         }
     };
 
-    let interpreter = Interpreter::new();
     if let Err(e) = interpreter.interpret(&statements) {
         runtime_error(e);
     }
@@ -63,7 +63,7 @@ fn run_file(path: impl AsRef<Path>) {
     todo!()
 }
 
-fn run_prompt() -> IOResult<()> {
+fn run_prompt(interpreter: &Interpreter) -> IOResult<()> {
     let reader = std::io::stdin();
 
     loop {
@@ -75,7 +75,7 @@ fn run_prompt() -> IOResult<()> {
             break;
         }
 
-        run(&line);
+        run(&line, interpreter);
         unsafe {
             HAD_ERROR.replace(false);
             HAD_RUNTIME_ERROR.replace(false);

@@ -9,16 +9,17 @@ use crate::token::{Token, TokenType};
 pub use error::*;
 pub use statement::Statement;
 use std::cell::RefCell;
+use std::rc::Rc;
 pub use value::LoxValue;
 
 pub struct Interpreter {
-    environment: RefCell<Option<Environment>>,
+    environment: Rc<RefCell<Environment>>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         Self {
-            environment: RefCell::new(Some(Environment::new())),
+            environment: Rc::new(RefCell::new(Environment::new())),
         }
     }
 
@@ -44,7 +45,6 @@ impl Interpreter {
                     None => LoxValue::Nil,
                 };
                 let mut env = self.environment.borrow_mut();
-                let env = env.as_mut().unwrap();
                 env.define(name.to_string(), initial);
             }
         }
@@ -65,7 +65,31 @@ impl Interpreter {
                 operator,
                 right,
             } => self.evaluate_binary(left, operator, right),
-            Expression::Var(name) => {}
+            Expression::Var { name, token } => {
+                let env = self.environment.borrow();
+
+                let value = match env.get(name) {
+                    Some(value) => value,
+                    None => {
+                        return Err(InterpreterError {
+                            error_type: InterpreterErrorType::UndefinedVariable(name.to_string()),
+                            token,
+                        })
+                    }
+                };
+                Ok(value.clone())
+            }
+            Expression::Assignment { name, value, token } => {
+                let mut env = self.environment.borrow_mut();
+                let value = self.evaluate(value)?;
+                if !env.set(name.clone(), value.clone()) {
+                    return Err(InterpreterError {
+                        error_type: InterpreterErrorType::UndefinedVariable(name.clone()),
+                        token,
+                    });
+                }
+                Ok(value)
+            }
         }
     }
 

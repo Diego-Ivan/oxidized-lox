@@ -9,7 +9,15 @@ pub enum Expression {
     },
     Grouping(Box<Expression>),
     Unary(Token, Box<Expression>),
-    Var(String),
+    Var {
+        name: String,
+        token: Token,
+    },
+    Assignment {
+        name: String,
+        value: Box<Expression>,
+        token: Token,
+    },
 
     // Literals
     True,
@@ -51,7 +59,12 @@ impl Debug for Expression {
             } => parenthesize(f, operator.lexeme(), &[left, right]),
             Expression::Grouping(expr) => parenthesize(f, "group", &[expr]),
             Expression::Unary(token, expr) => parenthesize(f, token.lexeme(), &[expr]),
-            Expression::Var(name) => write!(f, "Var({name})"),
+            Expression::Var { name, token } => write!(f, "Var({name})"),
+            Expression::Assignment {
+                name: _,
+                value,
+                token: _,
+            } => write!(f, "Assign(name = {value:?})"),
         }
     }
 }

@@ -19,4 +19,13 @@ impl Environment {
     pub fn get(&self, name: &str) -> Option<&LoxValue> {
         self.values.get(name)
     }
+
+    pub fn set(&mut self, name: String, value: LoxValue) -> bool {
+        if self.values.contains_key(&name) {
+            self.values.insert(name, value);
+            true
+        } else {
+            false
+        }
+    }
 }

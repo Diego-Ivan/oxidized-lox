@@ -9,6 +9,8 @@ pub enum ParserError {
     FailedMatch(TokenType),
     #[error("Expected token: {0:?}.")]
     ExpectExpression(Token),
+    #[error("Invalid assignment target: {0:?}.")]
+    InvalidAssignmentTarget(Expression),
 }
 
 type ParserResult<T> = Result<T, ParserError>;
@@ -130,6 +132,27 @@ impl<'a> Parser<'a> {
 
     fn expression(&mut self) -> ParserResult<Expression> {
         self.equality()
+    }
+
+    fn assignment(&mut self) -> ParserResult<Expression> {
+        let expr = self.equality()?;
+
+        if match_token!(self, TokenType::Equal) {
+            let equals = self.previous().unwrap().clone();
+            let value_expr = self.assignment()?;
+
+            if let Expression::Var { name, token } = &value_expr {
+                Ok(Expression::Assignment {
+                    name: name.to_string(),
+                    token: equals,
+                    value: Box::new(value_expr),
+                })
+            } else {
+                Err(ParserError::InvalidAssignmentTarget(value_expr))
+            }
+        } else {
+            Ok(expr)
+        }
     }
 
     fn equality(&mut self) -> ParserResult<Expression> {
@@ -254,7 +277,10 @@ impl<'a> Parser<'a> {
                 Ok(expr)
             }
             TokenType::Identifier(name) => {
-                let expression = Expression::Var(name.clone());
+                let expression = Expression::Var {
+                    name: String::from(name),
+                    token: self.peek().unwrap().clone(),
+                };
                 self.advance();
                 Ok(expression)
             }

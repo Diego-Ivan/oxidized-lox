@@ -18,6 +18,9 @@ impl Display for InterpreterError<'_> {
             InterpreterErrorType::WrongBinaryOperands(t1, op, t2) => {
                 format!("Operation of type: {op:?} cannot be applied over operands of types {t1:?} and {t2:?}")
             }
+            InterpreterErrorType::UndefinedVariable(name) => {
+                format!("Variable {name} is undefined")
+            }
         };
 
         write!(f, "{err_message}\n[line {}]", self.token.line())
