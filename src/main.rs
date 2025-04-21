@@ -11,7 +11,7 @@ use crate::interpreter::{Interpreter, InterpreterError};
 use crate::parser::Parser;
 use crate::scanner::Scanner;
 use std::cell::RefCell;
-use std::io::Result as IOResult;
+use std::io::{Read, Result as IOResult};
 use std::path::Path;
 use std::process::ExitCode;
 
@@ -21,7 +21,7 @@ static mut HAD_RUNTIME_ERROR: RefCell<bool> = RefCell::new(false);
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
 
-    if args.len() > 1 {
+    if args.len() < 1 {
         println!("Usage: lox [script]");
         return ExitCode::FAILURE;
     }
@@ -60,7 +60,13 @@ fn run(source: &str, interpreter: &Interpreter) {
 }
 
 fn run_file(path: impl AsRef<Path>) {
-    todo!()
+    let mut file = std::fs::File::open(path).unwrap();
+    let mut contents = String::new();
+
+    let interpreter = Interpreter::new();
+
+    file.read_to_string(&mut contents).unwrap();
+    run(&contents, &interpreter);
 }
 
 fn run_prompt(interpreter: &Interpreter) -> IOResult<()> {
