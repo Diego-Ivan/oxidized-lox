@@ -47,6 +47,9 @@ impl Interpreter {
                 let mut env = self.environment.borrow_mut();
                 env.define(name.to_string(), initial);
             }
+            Statement::Block(statements) => {
+                todo!()
+            }
         }
         Ok(())
     }

@@ -7,4 +7,5 @@ pub enum Statement {
         name: String,
         initializer: Option<Expression>,
     },
+    Block(Vec<Statement>),
 }

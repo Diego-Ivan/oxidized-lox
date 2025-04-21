@@ -103,6 +103,8 @@ impl<'a> Parser<'a> {
     fn parse_statement(&mut self) -> ParserResult<Statement> {
         if match_token!(self, TokenType::Print) {
             self.parse_print_statement()
+        } else if match_token!(self, TokenType::LeftBrace) {
+            self.parse_block()
         } else {
             self.parse_expression_statement()
         }
@@ -123,6 +125,24 @@ impl<'a> Parser<'a> {
             Ok(Statement::Print(expression))
         } else {
             Err(ParserError::FailedMatch(TokenType::Semicolon))
+        }
+    }
+
+    fn parse_block(&mut self) -> ParserResult<Statement> {
+        let mut statements = Vec::new();
+
+        while !matches!(self.peek().unwrap().token_type(), TokenType::RightBrace)
+            && self.is_at_end()
+        {
+            statements.push(self.declaration()?);
+        }
+
+        self.advance();
+
+        if match_token!(self, TokenType::RightBrace) {
+            Ok(Statement::Block(statements))
+        } else {
+            Err(ParserError::FailedMatch(TokenType::RightBrace))
         }
     }
 
