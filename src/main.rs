@@ -21,7 +21,7 @@ static mut HAD_RUNTIME_ERROR: RefCell<bool> = RefCell::new(false);
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
 
-    if args.len() < 1 {
+    if args.is_empty() {
         println!("Usage: lox [script]");
         return ExitCode::FAILURE;
     }

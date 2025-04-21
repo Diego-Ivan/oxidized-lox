@@ -55,6 +55,19 @@ impl Interpreter {
                 let enclosure = Environment::new_enclosed(environment);
                 self.execute_block(statements, Rc::new(RefCell::new(enclosure)))?;
             }
+            Statement::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let result = self.evaluate(condition, environment.clone())?.is_truthy();
+
+                if result {
+                    self.execute_statement(then_branch, environment)?;
+                } else if let Some(else_branch) = else_branch {
+                    self.execute_statement(else_branch, environment)?;
+                }
+            }
         }
         Ok(())
     }
@@ -64,7 +77,6 @@ impl Interpreter {
         statements: &'a [Statement],
         env: Rc<RefCell<Environment>>,
     ) -> InterpreterResult<'a, ()> {
-        let previous = self.environment.clone();
         for statement in statements {
             self.execute_statement(statement, env.clone())?;
         }

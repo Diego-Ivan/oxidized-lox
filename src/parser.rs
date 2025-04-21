@@ -36,6 +36,14 @@ macro_rules! match_token {
     };
 }
 
+macro_rules! expect_token {
+    ($parser: ident, $pattern: pat, $token_type: ident) => {
+        if !match_token!($parser, $pattern) {
+            return Err(ParserError::FailedMatch(TokenType::$token_type));
+        }
+    };
+}
+
 macro_rules! consume_token {
     ($parser: ident, $pattern: pat, $error: expr) => {
         match $parser.peek() {
@@ -68,8 +76,10 @@ impl<'a> Parser<'a> {
     fn declaration(&mut self) -> ParserResult<Statement> {
         if match_token!(self, TokenType::Var) {
             /* Synchronize if parsing a variable declaration failed */
-            self.variable_declaration()
-                .inspect_err(|_| self.synchronize())
+            self.variable_declaration().inspect_err(|e| {
+                eprintln!("{e}");
+                self.synchronize()
+            })
         } else {
             self.parse_statement()
         }
@@ -93,11 +103,8 @@ impl<'a> Parser<'a> {
             None
         };
 
-        if match_token!(self, TokenType::Semicolon) {
-            Ok(Statement::Declaration { name, initializer })
-        } else {
-            Err(ParserError::FailedMatch(TokenType::Semicolon))
-        }
+        expect_token!(self, TokenType::Semicolon, Semicolon);
+        Ok(Statement::Declaration { name, initializer })
     }
 
     fn parse_statement(&mut self) -> ParserResult<Statement> {
@@ -105,6 +112,8 @@ impl<'a> Parser<'a> {
             self.parse_print_statement()
         } else if match_token!(self, TokenType::LeftBrace) {
             self.parse_block()
+        } else if match_token!(self, TokenType::If) {
+            self.parse_if_statement()
         } else {
             self.parse_expression_statement()
         }
@@ -112,20 +121,16 @@ impl<'a> Parser<'a> {
 
     fn parse_expression_statement(&mut self) -> ParserResult<Statement> {
         let expression = self.expression()?;
-        if match_token!(self, TokenType::Semicolon) {
-            Ok(Statement::Expression(expression))
-        } else {
-            Err(ParserError::FailedMatch(TokenType::Semicolon))
-        }
+        expect_token!(self, TokenType::Semicolon, Semicolon);
+
+        Ok(Statement::Expression(expression))
     }
 
     fn parse_print_statement(&mut self) -> ParserResult<Statement> {
         let expression = self.expression()?;
-        if match_token!(self, TokenType::Semicolon) {
-            Ok(Statement::Print(expression))
-        } else {
-            Err(ParserError::FailedMatch(TokenType::Semicolon))
-        }
+        expect_token!(self, TokenType::Semicolon, Semicolon);
+
+        Ok(Statement::Print(expression))
     }
 
     fn parse_block(&mut self) -> ParserResult<Statement> {
@@ -137,19 +142,33 @@ impl<'a> Parser<'a> {
             statements.push(self.declaration()?);
         }
 
-        if match_token!(self, TokenType::RightBrace) {
-            Ok(Statement::Block(statements))
-        } else {
-            Err(ParserError::FailedMatch(TokenType::RightBrace))
-        }
+        expect_token!(self, TokenType::RightBrace, RightBrace);
+
+        Ok(Statement::Block(statements))
     }
 
-    pub fn parse(&mut self) -> ParserResult<Expression> {
-        self.expression()
+    fn parse_if_statement(&mut self) -> ParserResult<Statement> {
+        expect_token!(self, TokenType::LeftParen, LeftParen);
+        let condition = self.expression()?;
+        expect_token!(self, TokenType::RightParen, RightParen);
+
+        let then_branch = self.parse_statement()?;
+
+        let else_branch = if match_token!(self, TokenType::Else) {
+            Some(Box::new(self.parse_statement()?))
+        } else {
+            None
+        };
+
+        Ok(Statement::If {
+            condition,
+            then_branch: Box::new(then_branch),
+            else_branch,
+        })
     }
 
     fn expression(&mut self) -> ParserResult<Expression> {
-        self.equality()
+        self.assignment()
     }
 
     fn assignment(&mut self) -> ParserResult<Expression> {
@@ -159,7 +178,7 @@ impl<'a> Parser<'a> {
             let equals = self.previous().unwrap().clone();
             let value_expr = self.assignment()?;
 
-            if let Expression::Var { name, token } = &value_expr {
+            if let Expression::Var { name, token: _ } = &value_expr {
                 Ok(Expression::Assignment {
                     name: name.to_string(),
                     token: equals,
@@ -355,7 +374,7 @@ impl<'a> Parser<'a> {
             if matches!(next, Class | Fun | Var | For | If | While | Print | Return) {
                 return;
             }
+            self.advance();
         }
-        self.advance();
     }
 }
