@@ -131,13 +131,11 @@ impl<'a> Parser<'a> {
     fn parse_block(&mut self) -> ParserResult<Statement> {
         let mut statements = Vec::new();
 
-        while !matches!(self.peek().unwrap().token_type(), TokenType::RightBrace)
-            && self.is_at_end()
+        while !(matches!(self.peek().unwrap().token_type(), TokenType::RightBrace))
+            && !self.is_at_end()
         {
             statements.push(self.declaration()?);
         }
-
-        self.advance();
 
         if match_token!(self, TokenType::RightBrace) {
             Ok(Statement::Block(statements))
