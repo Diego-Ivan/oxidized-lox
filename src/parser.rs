@@ -11,6 +11,8 @@ pub enum ParserError {
     ExpectExpression(Token),
     #[error("Invalid assignment target: {0:?}.")]
     InvalidAssignmentTarget(Expression),
+    #[error("Unexpected end of file.")]
+    UnexpectedEof,
 }
 
 type ParserResult<T> = Result<T, ParserError>;
@@ -108,17 +110,30 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_statement(&mut self) -> ParserResult<Statement> {
-        // TODO: Use pattern matching for this stuff
-        if match_token!(self, TokenType::Print) {
-            self.parse_print_statement()
-        } else if match_token!(self, TokenType::LeftBrace) {
-            self.parse_block()
-        } else if match_token!(self, TokenType::If) {
-            self.parse_if_statement()
-        } else if match_token!(self, TokenType::While) {
-            self.parse_while_statement()
-        } else {
-            self.parse_expression_statement()
+        let token = self.peek().unwrap();
+
+        match token.token_type() {
+            TokenType::Print => {
+                self.advance();
+                self.parse_print_statement()
+            }
+            TokenType::LeftBrace => {
+                self.advance();
+                self.parse_block()
+            }
+            TokenType::If => {
+                self.advance();
+                self.parse_if_statement()
+            }
+            TokenType::For => {
+                self.advance();
+                self.parse_for_statement()
+            }
+            TokenType::While => {
+                self.advance();
+                self.parse_while_statement()
+            }
+            _ => self.parse_expression_statement(),
         }
     }
 
@@ -181,6 +196,54 @@ impl<'a> Parser<'a> {
             condition,
             body: Box::new(body),
         })
+    }
+
+    fn parse_for_statement(&mut self) -> ParserResult<Statement> {
+        expect_token!(self, TokenType::LeftParen, LeftParen);
+
+        let initializer = if match_token!(self, TokenType::Semicolon) {
+            None
+        } else if match_token!(self, TokenType::Var) {
+            Some(self.variable_declaration()?)
+        } else {
+            Some(self.parse_expression_statement()?)
+        };
+
+        let condition = if match_token!(self, TokenType::Semicolon) {
+            Expression::True
+        } else {
+            self.expression()?
+        };
+
+        expect_token!(self, TokenType::Semicolon, Semicolon);
+
+        let increment = if match_token!(self, TokenType::RightParen) {
+            None
+        } else {
+            let inc = Some(self.expression()?);
+            expect_token!(self, TokenType::RightParen, RightParen);
+            inc
+        };
+
+        let body = self.parse_statement()?;
+
+        let body = match increment {
+            Some(increment) => Statement::While {
+                body: Box::new(Statement::Block(vec![
+                    body,
+                    Statement::Expression(increment),
+                ])),
+                condition,
+            },
+            None => body,
+        };
+
+        let body = match initializer {
+            Some(initializer) => Statement::Block(vec![initializer, body]),
+            None => body,
+        };
+
+        Ok(body)
     }
 
     fn expression(&mut self) -> ParserResult<Expression> {
