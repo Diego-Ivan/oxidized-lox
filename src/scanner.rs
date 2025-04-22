@@ -122,10 +122,6 @@ impl<'a> Scanner<'a> {
         self.source.get(self.current).copied()
     }
 
-    fn peek_next(&self) -> Option<u8> {
-        self.source.get(self.current + 1).copied()
-    }
-
     fn match_character(&mut self, character: u8) -> bool {
         if self.is_at_end() {
             return false;

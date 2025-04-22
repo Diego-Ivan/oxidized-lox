@@ -67,7 +67,7 @@ impl Debug for Expression {
             } => parenthesize(f, operator.lexeme(), &[left, right]),
             Expression::Grouping(expr) => parenthesize(f, "group", &[expr]),
             Expression::Unary(token, expr) => parenthesize(f, token.lexeme(), &[expr]),
-            Expression::Var { name, token } => write!(f, "Var({name})"),
+            Expression::Var { name, token: _ } => write!(f, "Var({name})"),
             Expression::Assignment {
                 name: _,
                 value,

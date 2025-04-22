@@ -7,12 +7,8 @@ use thiserror::Error;
 pub enum ParserError {
     #[error("Expected: {0:?}")]
     FailedMatch(TokenType),
-    #[error("Expected token: {0:?}.")]
-    ExpectExpression(Token),
     #[error("Invalid assignment target: {0:?}.")]
     InvalidAssignmentTarget(Expression),
-    #[error("Unexpected end of file.")]
-    UnexpectedEof,
 }
 
 type ParserResult<T> = Result<T, ParserError>;
@@ -45,23 +41,6 @@ macro_rules! expect_token {
         }
     };
 }
-
-macro_rules! consume_token {
-    ($parser: ident, $pattern: pat, $error: expr) => {
-        match $parser.peek() {
-            Some(next_token) => {
-                if matches!(next_token.token_type(), $pattern) {
-                    $parser.advance();
-                    Ok(*next_token)
-                } else {
-                    Err($error)
-                }
-            }
-            None => Err($error),
-        }
-    };
-}
-
 impl<'a> Parser<'a> {
     pub fn new(tokens: &'a [Token]) -> Self {
         Self { tokens, current: 0 }
@@ -391,10 +370,6 @@ impl<'a> Parser<'a> {
             return Ok(Expression::Unary(operator, Box::new(right)));
         }
         self.primary()
-    }
-
-    fn get_current(&self) -> &Token {
-        self.peek().unwrap()
     }
     fn primary(&mut self) -> ParserResult<Expression> {
         match self.peek().unwrap().token_type() {

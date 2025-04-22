@@ -1,6 +1,5 @@
 mod expression;
 mod interpreter;
-mod once_cell;
 mod parser;
 mod scanner;
 mod token;
@@ -10,13 +9,13 @@ use crate::expression::Expression;
 use crate::interpreter::{Interpreter, InterpreterError};
 use crate::parser::Parser;
 use crate::scanner::Scanner;
-use std::cell::RefCell;
 use std::io::{Read, Result as IOResult};
 use std::path::Path;
 use std::process::ExitCode;
+use std::sync::Mutex;
 
-static mut HAD_ERROR: RefCell<bool> = RefCell::new(false);
-static mut HAD_RUNTIME_ERROR: RefCell<bool> = RefCell::new(false);
+static HAD_ERROR: Mutex<bool> = Mutex::new(false);
+static HAD_RUNTIME_ERROR: Mutex<bool> = Mutex::new(false);
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
@@ -32,12 +31,10 @@ fn main() -> ExitCode {
         None => run_prompt(&interpreter).unwrap(),
     }
 
-    unsafe {
-        if *HAD_ERROR.get_mut() {
-            ExitCode::FAILURE
-        } else {
-            ExitCode::SUCCESS
-        }
+    if *HAD_ERROR.lock().unwrap() {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
     }
 }
 
@@ -82,10 +79,9 @@ fn run_prompt(interpreter: &Interpreter) -> IOResult<()> {
         }
 
         run(&line, interpreter);
-        unsafe {
-            HAD_ERROR.replace(false);
-            HAD_RUNTIME_ERROR.replace(false);
-        }
+
+        *HAD_ERROR.lock().unwrap() = false;
+        *HAD_RUNTIME_ERROR.lock().unwrap() = false;
     }
 
     Ok(())
@@ -97,14 +93,10 @@ fn error(line: usize, message: &str) {
 
 fn runtime_error(error: InterpreterError) {
     println!("{error}");
-    unsafe {
-        HAD_RUNTIME_ERROR.replace(true);
-    }
+    *HAD_RUNTIME_ERROR.lock().unwrap() = true;
 }
 
 fn report(line: usize, s_where: &str, message: &str) {
     println!("[line {line}] Error {s_where}: {message}");
-    unsafe {
-        HAD_ERROR.replace(true);
-    }
+    *HAD_ERROR.lock().unwrap() = true;
 }
