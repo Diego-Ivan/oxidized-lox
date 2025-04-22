@@ -126,6 +126,22 @@ impl Interpreter {
                 }
                 Ok(value)
             }
+            Expression::Or { left, right } => {
+                let left = self.evaluate(left, env.clone())?;
+                if left.is_truthy() {
+                    Ok(left)
+                } else {
+                    self.evaluate(right, env)
+                }
+            }
+            Expression::And { left, right } => {
+                let left = self.evaluate(left, env.clone())?;
+                if !left.is_truthy() {
+                    Ok(left)
+                } else {
+                    self.evaluate(right, env)
+                }
+            }
         }
     }
 
@@ -204,14 +220,6 @@ impl Interpreter {
             }
             (LoxValue::Number(a), TokenType::Less, LoxValue::Number(b)) => {
                 Ok(LoxValue::Boolean(a < b))
-            }
-
-            /* Boolean operations */
-            (LoxValue::Boolean(a), TokenType::Or, LoxValue::Boolean(b)) => {
-                Ok(LoxValue::Boolean(a || b))
-            }
-            (LoxValue::Boolean(a), TokenType::And, LoxValue::Boolean(b)) => {
-                Ok(LoxValue::Boolean(a && b))
             }
 
             /* String operations */

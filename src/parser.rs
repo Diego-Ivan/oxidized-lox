@@ -172,7 +172,7 @@ impl<'a> Parser<'a> {
     }
 
     fn assignment(&mut self) -> ParserResult<Expression> {
-        let expr = self.equality()?;
+        let expr = self.or()?;
 
         if match_token!(self, TokenType::Equal) {
             let equals = self.previous().unwrap().clone();
@@ -190,6 +190,34 @@ impl<'a> Parser<'a> {
         } else {
             Ok(expr)
         }
+    }
+
+    fn or(&mut self) -> ParserResult<Expression> {
+        let mut expr = self.and()?;
+
+        while match_token!(self, TokenType::Or) {
+            let right = self.and()?;
+            expr = Expression::Or {
+                left: Box::new(expr),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(expr)
+    }
+
+    fn and(&mut self) -> ParserResult<Expression> {
+        let mut expr = self.equality()?;
+
+        while match_token!(self, TokenType::And) {
+            let right = self.equality()?;
+            expr = Expression::And {
+                left: Box::new(expr),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(expr)
     }
 
     fn equality(&mut self) -> ParserResult<Expression> {

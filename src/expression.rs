@@ -18,6 +18,14 @@ pub enum Expression {
         value: Box<Expression>,
         token: Token,
     },
+    Or {
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
+    And {
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
 
     // Literals
     True,
@@ -65,6 +73,12 @@ impl Debug for Expression {
                 value,
                 token: _,
             } => write!(f, "Assign(name = {value:?})"),
+            Expression::Or { left, right } => {
+                write!(f, "({left:?}) || ({right:?})")
+            }
+            Expression::And { left, right } => {
+                write!(f, "({left:?}) && ({right:?})")
+            }
         }
     }
 }
