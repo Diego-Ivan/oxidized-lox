@@ -39,9 +39,12 @@ impl Environment {
     }
 
     pub fn set(&mut self, name: String, value: LoxValue) -> bool {
-        if let std::collections::hash_map::Entry::Occupied(mut e) = self.values.entry(name) {
+        if let std::collections::hash_map::Entry::Occupied(mut e) = self.values.entry(name.clone())
+        {
             e.insert(value);
             true
+        } else if let Some(enclosing) = self.enclosing.clone() {
+            enclosing.borrow_mut().set(name, value)
         } else {
             false
         }

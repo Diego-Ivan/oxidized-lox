@@ -68,6 +68,11 @@ impl Interpreter {
                     self.execute_statement(else_branch, environment)?;
                 }
             }
+            Statement::While { condition, body } => {
+                while self.evaluate(condition, environment.clone())?.is_truthy() {
+                    self.execute_statement(body, environment.clone())?;
+                }
+            }
         }
         Ok(())
     }

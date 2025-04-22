@@ -108,12 +108,15 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_statement(&mut self) -> ParserResult<Statement> {
+        // TODO: Use pattern matching for this stuff
         if match_token!(self, TokenType::Print) {
             self.parse_print_statement()
         } else if match_token!(self, TokenType::LeftBrace) {
             self.parse_block()
         } else if match_token!(self, TokenType::If) {
             self.parse_if_statement()
+        } else if match_token!(self, TokenType::While) {
+            self.parse_while_statement()
         } else {
             self.parse_expression_statement()
         }
@@ -167,6 +170,19 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn parse_while_statement(&mut self) -> ParserResult<Statement> {
+        expect_token!(self, TokenType::LeftParen, LeftParen);
+        let condition = self.expression()?;
+        expect_token!(self, TokenType::RightParen, RightParen);
+
+        let body = self.parse_statement()?;
+
+        Ok(Statement::While {
+            condition,
+            body: Box::new(body),
+        })
+    }
+
     fn expression(&mut self) -> ParserResult<Expression> {
         self.assignment()
     }
@@ -178,7 +194,7 @@ impl<'a> Parser<'a> {
             let equals = self.previous().unwrap().clone();
             let value_expr = self.assignment()?;
 
-            if let Expression::Var { name, token: _ } = &value_expr {
+            if let Expression::Var { name, token: _ } = &expr {
                 Ok(Expression::Assignment {
                     name: name.to_string(),
                     token: equals,
