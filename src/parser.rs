@@ -3,12 +3,16 @@ use crate::token::{Token, TokenType};
 use crate::Expression;
 use thiserror::Error;
 
+const MAX_ARGS: usize = 255;
+
 #[derive(Error, Debug)]
 pub enum ParserError {
     #[error("Expected: {0:?}")]
     FailedMatch(TokenType),
     #[error("Invalid assignment target: {0:?}.")]
     InvalidAssignmentTarget(Expression),
+    #[error("Token {0:?} has too many arguments (max: {MAX_ARGS})")]
+    TooManyArgs(Token),
 }
 
 type ParserResult<T> = Result<T, ParserError>;
@@ -24,6 +28,21 @@ macro_rules! match_token {
             Some(next_token) => {
                 if matches!(next_token.token_type(), $pattern) {
                     $parser.advance();
+                    true
+                } else {
+                    false
+                }
+            }
+            None => false,
+        }
+    };
+}
+
+macro_rules! check_token {
+    ($parser: ident, $pattern: pat) => {
+        match $parser.peek() {
+            Some(next_token) => {
+                if matches!(next_token.token_type(), $pattern) {
                     true
                 } else {
                     false
@@ -59,7 +78,7 @@ impl<'a> Parser<'a> {
             /* Synchronize if parsing a variable declaration failed */
             self.variable_declaration().inspect_err(|e| {
                 eprintln!("{e}");
-                self.synchronize()
+                self.synchronize();
             })
         } else {
             self.parse_statement()
@@ -369,8 +388,46 @@ impl<'a> Parser<'a> {
             let right = self.unary()?;
             return Ok(Expression::Unary(operator, Box::new(right)));
         }
-        self.primary()
+        self.call()
     }
+
+    fn call(&mut self) -> ParserResult<Expression> {
+        let mut expr = self.primary()?;
+        loop {
+            if !match_token!(self, TokenType::LeftParen) {
+                break;
+            }
+            expr = self.finish_call(expr)?;
+        }
+
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, expr: Expression) -> ParserResult<Expression> {
+        let mut args = Vec::new();
+
+        if !check_token!(self, TokenType::RightParen) {
+            if args.len() >= MAX_ARGS {
+                eprintln!("{}", ParserError::TooManyArgs(self.peek().unwrap().clone()));
+            }
+
+            args.push(self.expression()?);
+
+            while match_token!(self, TokenType::Comma) {
+                args.push(self.expression()?);
+            }
+        }
+
+        expect_token!(self, TokenType::RightParen, RightParen);
+        let token = self.previous().unwrap().clone();
+
+        Ok(Expression::Call {
+            callee: Box::new(expr),
+            paren: token,
+            args,
+        })
+    }
+
     fn primary(&mut self) -> ParserResult<Expression> {
         match self.peek().unwrap().token_type() {
             TokenType::False => {

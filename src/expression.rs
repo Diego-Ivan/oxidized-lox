@@ -26,6 +26,11 @@ pub enum Expression {
         left: Box<Expression>,
         right: Box<Expression>,
     },
+    Call {
+        callee: Box<Expression>,
+        paren: Token,
+        args: Vec<Expression>,
+    },
 
     // Literals
     True,
@@ -78,6 +83,13 @@ impl Debug for Expression {
             }
             Expression::And { left, right } => {
                 write!(f, "({left:?}) && ({right:?})")
+            }
+            Expression::Call {
+                callee,
+                paren: _,
+                args,
+            } => {
+                write!(f, "call (callee: {callee:?}, args: {args:?})")
             }
         }
     }
