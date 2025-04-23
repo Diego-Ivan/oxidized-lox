@@ -55,11 +55,21 @@ macro_rules! check_token {
 
 macro_rules! expect_token {
     ($parser: ident, $pattern: pat, $token_type: ident) => {
-        if !match_token!($parser, $pattern) {
+        if !(match_token!($parser, $pattern)) {
             return Err(ParserError::FailedMatch(TokenType::$token_type));
         }
     };
 }
+
+macro_rules! expect_token_with_param {
+    ($parser: ident, $pattern: pat, $token_type: ident, $params: expr) => {{
+        if !(match_token!($parser, $pattern)) {
+            return Err(ParserError::FailedMatch(TokenType::$token_type($params)));
+        }
+        $parser.previous().unwrap()
+    }};
+}
+
 impl<'a> Parser<'a> {
     pub fn new(tokens: &'a [Token]) -> Self {
         Self { tokens, current: 0 }
@@ -74,7 +84,9 @@ impl<'a> Parser<'a> {
     }
 
     fn declaration(&mut self) -> ParserResult<Statement> {
-        if match_token!(self, TokenType::Var) {
+        if match_token!(self, TokenType::Fun) {
+            self.function_declaration()
+        } else if match_token!(self, TokenType::Var) {
             /* Synchronize if parsing a variable declaration failed */
             self.variable_declaration().inspect_err(|e| {
                 eprintln!("{e}");
@@ -83,6 +95,51 @@ impl<'a> Parser<'a> {
         } else {
             self.parse_statement()
         }
+    }
+
+    fn function_declaration(&mut self) -> ParserResult<Statement> {
+        macro_rules! expect_identifier {
+            ($parser: ident) => {{
+                expect_token_with_param!(
+                    $parser,
+                    TokenType::Identifier(_),
+                    Identifier,
+                    String::from("undefined")
+                )
+            }};
+        }
+
+        let name = expect_identifier!(self).lexeme().to_string();
+
+        expect_token!(self, TokenType::LeftParen, LeftParen);
+
+        let mut parameters = Vec::new();
+        if !check_token!(self, TokenType::RightParen) {
+            let name = expect_identifier!(self).clone();
+            parameters.push(name);
+
+            while !check_token!(self, TokenType::RightParen) {
+                if parameters.len() >= MAX_ARGS {
+                    eprintln!("{}", ParserError::TooManyArgs(self.peek().unwrap().clone()));
+                    break;
+                }
+
+                let name = expect_identifier!(self).clone();
+                parameters.push(name);
+            }
+        }
+
+        expect_token!(self, TokenType::RightParen, RightParen);
+
+        expect_token!(self, TokenType::LeftBrace, LeftBrace);
+        let body = Box::new(self.parse_block()?);
+        expect_token!(self, TokenType::RightBrace, LeftBrace);
+
+        Ok(Statement::FunctionDeclaration {
+            name,
+            parameters,
+            body,
+        })
     }
 
     fn variable_declaration(&mut self) -> ParserResult<Statement> {
@@ -104,7 +161,7 @@ impl<'a> Parser<'a> {
         };
 
         expect_token!(self, TokenType::Semicolon, Semicolon);
-        Ok(Statement::Declaration { name, initializer })
+        Ok(Statement::VariableDeclaration { name, initializer })
     }
 
     fn parse_statement(&mut self) -> ParserResult<Statement> {
@@ -407,14 +464,15 @@ impl<'a> Parser<'a> {
         let mut args = Vec::new();
 
         if !check_token!(self, TokenType::RightParen) {
-            if args.len() >= MAX_ARGS {
-                eprintln!("{}", ParserError::TooManyArgs(self.peek().unwrap().clone()));
-            }
-
             args.push(self.expression()?);
 
             while match_token!(self, TokenType::Comma) {
                 args.push(self.expression()?);
+
+                if args.len() >= MAX_ARGS {
+                    eprintln!("{}", ParserError::TooManyArgs(self.peek().unwrap().clone()));
+                    break;
+                }
             }
         }
 

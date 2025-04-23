@@ -44,7 +44,7 @@ impl Interpreter {
                 let result = self.evaluate(expr, environment)?;
                 println!("{result}");
             }
-            Statement::Declaration { name, initializer } => {
+            Statement::VariableDeclaration { name, initializer } => {
                 let initial = match initializer.as_ref() {
                     Some(initializer) => self.evaluate(initializer, environment.clone())?,
                     None => LoxValue::Nil,
@@ -74,6 +74,11 @@ impl Interpreter {
                     self.execute_statement(body, environment.clone())?;
                 }
             }
+            Statement::FunctionDeclaration {
+                name,
+                parameters,
+                body,
+            } => {}
         }
         Ok(())
     }
