@@ -1,11 +1,12 @@
 use std::fmt::{Display, Formatter};
+use std::rc::Rc;
 
 #[derive(Debug, Clone)]
 pub enum LoxValue {
     Nil,
     Boolean(bool),
     Number(f64),
-    String(String),
+    String(Rc<String>),
 }
 
 impl LoxValue {

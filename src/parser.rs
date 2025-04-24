@@ -115,17 +115,17 @@ impl<'a> Parser<'a> {
 
         let mut parameters = Vec::new();
         if !check_token!(self, TokenType::RightParen) {
-            let name = expect_identifier!(self).clone();
-            parameters.push(name);
+            let ident = expect_identifier!(self).clone();
+            parameters.push(ident);
 
-            while !check_token!(self, TokenType::RightParen) {
+            while match_token!(self, TokenType::Comma) {
                 if parameters.len() >= MAX_ARGS {
                     eprintln!("{}", ParserError::TooManyArgs(self.peek().unwrap().clone()));
                     break;
                 }
 
-                let name = expect_identifier!(self).clone();
-                parameters.push(name);
+                let ident = expect_identifier!(self).clone();
+                parameters.push(ident);
             }
         }
 
@@ -133,7 +133,6 @@ impl<'a> Parser<'a> {
 
         expect_token!(self, TokenType::LeftBrace, LeftBrace);
         let body = Box::new(self.parse_block()?);
-        expect_token!(self, TokenType::RightBrace, LeftBrace);
 
         Ok(Statement::FunctionDeclaration {
             name,

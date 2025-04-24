@@ -104,7 +104,7 @@ impl Interpreter {
             Expression::True => Ok(LoxValue::Boolean(true)),
             Expression::False => Ok(LoxValue::Boolean(false)),
             Expression::Number(num) => Ok(LoxValue::Number(*num)),
-            Expression::String(str) => Ok(LoxValue::String(str.to_string())),
+            Expression::String(str) => Ok(LoxValue::String(Rc::new(str.to_string()))),
             Expression::Nil => Ok(LoxValue::Nil),
             Expression::Grouping(expr) => self.evaluate(expr, env),
             Expression::Unary(token, expression) => self.evaluate_unary(token, expression, env),
@@ -239,12 +239,13 @@ impl Interpreter {
             }
 
             /* String operations */
-            (LoxValue::String(mut s1), TokenType::Plus, LoxValue::String(s2)) => {
+            (LoxValue::String(s1), TokenType::Plus, LoxValue::String(s2)) => {
+                let mut s1 = s1.to_string();
                 s1.push_str(&s2);
-                Ok(LoxValue::String(s1))
+                Ok(LoxValue::String(Rc::new(s1)))
             }
             (LoxValue::String(s1), TokenType::Plus, any) => {
-                Ok(LoxValue::String(format!("{s1}{any}")))
+                Ok(LoxValue::String(Rc::new(format!("{s1}{any}"))))
             }
 
             /* Any other invalid operation will be handled here. */
