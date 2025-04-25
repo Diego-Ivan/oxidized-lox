@@ -13,47 +13,54 @@ use std::cell::RefCell;
 use std::rc::Rc;
 pub use value::LoxValue;
 
+type RcEnvironment = Rc<RefCell<Environment>>;
+
 pub struct Interpreter {
-    environment: Rc<RefCell<Environment>>,
+    globals: RcEnvironment,
+    environment_stack: RefCell<Vec<RcEnvironment>>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
+        let globals = Rc::new(RefCell::new(Environment::new()));
         Self {
-            environment: Rc::new(RefCell::new(Environment::new())),
+            environment_stack: RefCell::new(vec![globals.clone()]),
+            globals,
         }
     }
 
     pub fn interpret<'a>(&'a self, statements: &'a [Statement]) -> InterpreterResult<'a, ()> {
         for statement in statements {
-            self.execute_statement(statement, self.environment.clone())?;
+            self.execute_statement(statement)?;
         }
         Ok(())
     }
 
-    fn execute_statement<'a>(
-        &'a self,
-        statement: &'a Statement,
-        environment: Rc<RefCell<Environment>>,
-    ) -> InterpreterResult<'a, ()> {
+    fn execute_statement<'a>(&'a self, statement: &'a Statement) -> InterpreterResult<'a, ()> {
         match statement {
             Statement::Expression(expr) => {
-                self.evaluate(expr, environment)?;
+                self.evaluate(expr)?;
             }
             Statement::Print(expr) => {
-                let result = self.evaluate(expr, environment)?;
+                let result = self.evaluate(expr)?;
                 println!("{result}");
             }
             Statement::VariableDeclaration { name, initializer } => {
                 let initial = match initializer.as_ref() {
-                    Some(initializer) => self.evaluate(initializer, environment.clone())?,
+                    Some(initializer) => self.evaluate(initializer)?,
                     None => LoxValue::Nil,
                 };
-                let mut env = environment.borrow_mut();
+                let env_stack = self.environment_stack.borrow_mut();
+                let mut env = env_stack.last().unwrap().borrow_mut();
                 env.define(name.to_string(), initial);
             }
             Statement::Block(statements) => {
-                let enclosure = Environment::new_enclosed(environment);
+                let current_env = {
+                    let env_stack = self.environment_stack.borrow_mut();
+                    env_stack.last().unwrap().clone()
+                };
+
+                let enclosure = Environment::new_enclosed(current_env);
                 self.execute_block(statements, Rc::new(RefCell::new(enclosure)))?;
             }
             Statement::If {
@@ -61,17 +68,17 @@ impl Interpreter {
                 then_branch,
                 else_branch,
             } => {
-                let result = self.evaluate(condition, environment.clone())?.is_truthy();
+                let result = self.evaluate(condition)?.is_truthy();
 
                 if result {
-                    self.execute_statement(then_branch, environment)?;
+                    self.execute_statement(then_branch)?;
                 } else if let Some(else_branch) = else_branch {
-                    self.execute_statement(else_branch, environment)?;
+                    self.execute_statement(else_branch)?;
                 }
             }
             Statement::While { condition, body } => {
-                while self.evaluate(condition, environment.clone())?.is_truthy() {
-                    self.execute_statement(body, environment.clone())?;
+                while self.evaluate(condition)?.is_truthy() {
+                    self.execute_statement(body)?;
                 }
             }
             Statement::FunctionDeclaration {
@@ -89,32 +96,37 @@ impl Interpreter {
         env: Rc<RefCell<Environment>>,
     ) -> InterpreterResult<'a, ()> {
         for statement in statements {
-            self.execute_statement(statement, env.clone())?;
+            {
+                let mut env_mut = self.environment_stack.borrow_mut();
+                env_mut.push(env.clone());
+            }
+
+            let result = self.execute_statement(statement);
+            self.environment_stack.borrow_mut().pop();
+
+            result?;
         }
 
         Ok(())
     }
 
-    fn evaluate<'a>(
-        &'a self,
-        expression: &'a Expression,
-        env: Rc<RefCell<Environment>>,
-    ) -> InterpreterResult<'a, LoxValue> {
+    fn evaluate<'a>(&'a self, expression: &'a Expression) -> InterpreterResult<'a, LoxValue> {
         match expression {
             Expression::True => Ok(LoxValue::Boolean(true)),
             Expression::False => Ok(LoxValue::Boolean(false)),
             Expression::Number(num) => Ok(LoxValue::Number(*num)),
             Expression::String(str) => Ok(LoxValue::String(Rc::new(str.to_string()))),
             Expression::Nil => Ok(LoxValue::Nil),
-            Expression::Grouping(expr) => self.evaluate(expr, env),
-            Expression::Unary(token, expression) => self.evaluate_unary(token, expression, env),
+            Expression::Grouping(expr) => self.evaluate(expr),
+            Expression::Unary(token, expression) => self.evaluate_unary(token, expression),
             Expression::Binary {
                 left,
                 operator,
                 right,
-            } => self.evaluate_binary(left, operator, right, env),
+            } => self.evaluate_binary(left, operator, right),
             Expression::Var { name, token } => {
-                let env = env.borrow_mut();
+                let env_stack = self.environment_stack.borrow_mut();
+                let mut env = env_stack.last().unwrap().borrow_mut();
                 let value = match env.get(name) {
                     Some(value) => value,
                     None => {
@@ -127,8 +139,10 @@ impl Interpreter {
                 Ok(value.clone())
             }
             Expression::Assignment { name, value, token } => {
-                let value = self.evaluate(value, env.clone())?;
-                let mut env = env.borrow_mut();
+                let value = self.evaluate(value)?;
+                let env_stack = self.environment_stack.borrow_mut();
+                let mut env = env_stack.last().unwrap().borrow_mut();
+
                 if !env.set(name.clone(), value.clone()) {
                     return Err(InterpreterError {
                         error_type: InterpreterErrorType::UndefinedVariable(name.clone()),
@@ -138,19 +152,19 @@ impl Interpreter {
                 Ok(value)
             }
             Expression::Or { left, right } => {
-                let left = self.evaluate(left, env.clone())?;
+                let left = self.evaluate(left)?;
                 if left.is_truthy() {
                     Ok(left)
                 } else {
-                    self.evaluate(right, env)
+                    self.evaluate(right)
                 }
             }
             Expression::And { left, right } => {
-                let left = self.evaluate(left, env.clone())?;
+                let left = self.evaluate(left)?;
                 if !left.is_truthy() {
                     Ok(left)
                 } else {
-                    self.evaluate(right, env)
+                    self.evaluate(right)
                 }
             }
             Expression::Call {
@@ -165,9 +179,8 @@ impl Interpreter {
         &'a self,
         token: &'a Token,
         expression: &'a Expression,
-        environment: Rc<RefCell<Environment>>,
     ) -> InterpreterResult<'a, LoxValue> {
-        match (token.token_type(), self.evaluate(expression, environment)?) {
+        match (token.token_type(), self.evaluate(expression)?) {
             /* Numerical negation */
             (TokenType::Minus, LoxValue::Number(num)) => Ok(LoxValue::Number(-num)),
 
@@ -192,12 +205,11 @@ impl Interpreter {
         first_operand: &'a Expression,
         operator: &'a Token,
         second_operand: &'a Expression,
-        environment: Rc<RefCell<Environment>>,
     ) -> InterpreterResult<'a, LoxValue> {
         match (
-            self.evaluate(first_operand, environment.clone())?,
+            self.evaluate(first_operand)?,
             operator.token_type(),
-            self.evaluate(second_operand, environment)?,
+            self.evaluate(second_operand)?,
         ) {
             /* Algebraic operations */
             (LoxValue::Number(a), TokenType::Plus, LoxValue::Number(b)) => {

@@ -1,8 +1,9 @@
-use crate::interpreter::{Interpreter, InterpreterResult, LoxValue, Statement};
+use crate::interpreter::statement::Block;
+use crate::interpreter::{Interpreter, InterpreterResult, LoxValue};
 use crate::token::Token;
 
 pub type NativeFunc<'a> =
-    fn(interpreter: &'a Interpreter, args: &[Token]) -> InterpreterResult<'a, LoxValue>;
+    fn(interpreter: &Interpreter, args: &'a [Token]) -> InterpreterResult<'a, LoxValue>;
 
 #[derive(Debug)]
 pub enum Callable<'a> {
@@ -11,17 +12,17 @@ pub enum Callable<'a> {
         args: Vec<Token>,
     },
     LoxFunction {
-        statement: Statement,
+        block: Block,
         arguments: Vec<Token>,
     },
 }
 
 impl<'a> Callable<'a> {
-    pub fn call(&self, interpreter: &'a Interpreter) -> InterpreterResult<'a, LoxValue> {
+    pub fn call(&'a self, interpreter: &'a Interpreter) -> InterpreterResult<'a, LoxValue> {
         match self {
             Self::Native { func, args } => func(interpreter, args),
             Self::LoxFunction {
-                statement: _,
+                block: _,
                 arguments: _,
             } => todo!(),
         }

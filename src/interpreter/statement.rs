@@ -1,6 +1,8 @@
 use crate::expression::Expression;
 use crate::token::Token;
 
+pub type Block = Vec<Statement>;
+
 #[derive(Debug)]
 pub enum Statement {
     Expression(Expression),
@@ -14,7 +16,7 @@ pub enum Statement {
         parameters: Vec<Token>,
         body: Box<Statement>,
     },
-    Block(Vec<Statement>),
+    Block(Block),
     If {
         condition: Expression,
         then_branch: Box<Statement>,
