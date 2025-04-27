@@ -1,10 +1,12 @@
 mod callable;
 mod environment;
 mod error;
+mod native;
 pub mod statement;
 mod value;
 
 use crate::expression::Expression;
+use crate::interpreter::callable::Callable;
 use crate::interpreter::environment::Environment;
 use crate::token::{Token, TokenType};
 pub use error::*;
@@ -23,10 +25,13 @@ pub struct Interpreter {
 impl Interpreter {
     pub fn new() -> Self {
         let globals = Rc::new(RefCell::new(Environment::new()));
-        Self {
+        let interpreter = Self {
             environment_stack: RefCell::new(vec![globals.clone()]),
             globals,
-        }
+        };
+        interpreter.load_native_functions();
+
+        interpreter
     }
 
     pub fn interpret<'a>(&'a self, statements: &'a [Statement]) -> InterpreterResult<'a, ()> {
@@ -85,7 +90,16 @@ impl Interpreter {
                 name,
                 parameters,
                 body,
-            } => {}
+            } => {
+                let function = Callable::LoxFunction {
+                    name: name.clone(),
+                    params: parameters.clone(),
+                    block: body.clone(),
+                };
+
+                let mut global = self.globals.borrow_mut();
+                global.define(name.clone(), LoxValue::Callable(Rc::new(function)));
+            }
         }
         Ok(())
     }
@@ -168,13 +182,24 @@ impl Interpreter {
                 }
             }
             Expression::Call {
-                callee: _,
-                paren: _,
-                args: _,
-            } => todo!(),
+                callee,
+                paren,
+                args,
+            } => {
+                let function = match self.evaluate(callee)? {
+                    LoxValue::Callable(callable) => callable,
+                    _ => panic!("Not a callable"),
+                };
+
+                let mut arguments = Vec::new();
+                for arg in args {
+                    arguments.push(self.evaluate(arg)?);
+                }
+
+                todo!()
+            }
         }
     }
-
     fn evaluate_unary<'a>(
         &'a self,
         token: &'a Token,
@@ -266,5 +291,21 @@ impl Interpreter {
                 error_type: InterpreterErrorType::WrongBinaryOperands(t1, op, t2),
             }),
         }
+    }
+
+    fn load_native_functions(&self) {
+        let mut _global = self.globals.borrow_mut();
+
+        macro_rules! define_native {
+            ($name: literal, $arity: expr, $fun: expr) => {{
+                let func = Callable::Native {
+                    arity: $arity,
+                    func: $fun,
+                };
+                _global.define(String::from($name), LoxValue::Callable(Rc::new(func)));
+            }};
+        }
+
+        define_native!("clock", 0, native::clock_native);
     }
 }

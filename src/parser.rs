@@ -1,4 +1,4 @@
-use crate::interpreter::statement::Statement;
+use crate::interpreter::statement::{Block, Statement};
 use crate::token::{Token, TokenType};
 use crate::Expression;
 use thiserror::Error;
@@ -13,6 +13,8 @@ pub enum ParserError {
     InvalidAssignmentTarget(Expression),
     #[error("Token {0:?} has too many arguments (max: {MAX_ARGS})")]
     TooManyArgs(Token),
+    #[error("Expected Block statement")]
+    ExpectedBlock,
 }
 
 type ParserResult<T> = Result<T, ParserError>;
@@ -23,7 +25,7 @@ pub struct Parser<'a> {
 }
 
 macro_rules! match_token {
-    ($parser: ident, $pattern: pat) => {
+    ($parser: ident, $pattern: pat) => {{
         match $parser.peek() {
             Some(next_token) => {
                 if matches!(next_token.token_type(), $pattern) {
@@ -35,11 +37,11 @@ macro_rules! match_token {
             }
             None => false,
         }
-    };
+    }};
 }
 
 macro_rules! check_token {
-    ($parser: ident, $pattern: pat) => {
+    ($parser: ident, $pattern: pat) => {{
         match $parser.peek() {
             Some(next_token) => {
                 if matches!(next_token.token_type(), $pattern) {
@@ -50,23 +52,25 @@ macro_rules! check_token {
             }
             None => false,
         }
-    };
+    }};
 }
 
 macro_rules! expect_token {
-    ($parser: ident, $pattern: pat, $token_type: ident) => {
+    ($parser: ident, $pattern: pat, $token_type: ident) => {{
         if !(match_token!($parser, $pattern)) {
             return Err(ParserError::FailedMatch(TokenType::$token_type));
         }
-    };
+    }};
 }
 
 macro_rules! expect_token_with_param {
     ($parser: ident, $pattern: pat, $token_type: ident, $params: expr) => {{
-        if !(match_token!($parser, $pattern)) {
-            return Err(ParserError::FailedMatch(TokenType::$token_type($params)));
+        {
+            if !(match_token!($parser, $pattern)) {
+                return Err(ParserError::FailedMatch(TokenType::$token_type($params)));
+            }
+            $parser.previous().unwrap()
         }
-        $parser.previous().unwrap()
     }};
 }
 
@@ -132,7 +136,7 @@ impl<'a> Parser<'a> {
         expect_token!(self, TokenType::RightParen, RightParen);
 
         expect_token!(self, TokenType::LeftBrace, LeftBrace);
-        let body = Box::new(self.parse_block()?);
+        let body = self.parse_block()?;
 
         Ok(Statement::FunctionDeclaration {
             name,
@@ -173,7 +177,7 @@ impl<'a> Parser<'a> {
             }
             TokenType::LeftBrace => {
                 self.advance();
-                self.parse_block()
+                self.parse_block_statement()
             }
             TokenType::If => {
                 self.advance();
@@ -205,7 +209,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::Print(expression))
     }
 
-    fn parse_block(&mut self) -> ParserResult<Statement> {
+    fn parse_block(&mut self) -> ParserResult<Block> {
         let mut statements = Vec::new();
 
         while !(matches!(self.peek().unwrap().token_type(), TokenType::RightBrace))
@@ -216,7 +220,11 @@ impl<'a> Parser<'a> {
 
         expect_token!(self, TokenType::RightBrace, RightBrace);
 
-        Ok(Statement::Block(statements))
+        Ok(statements)
+    }
+
+    fn parse_block_statement(&mut self) -> ParserResult<Statement> {
+        Ok(Statement::Block(self.parse_block()?))
     }
 
     fn parse_if_statement(&mut self) -> ParserResult<Statement> {

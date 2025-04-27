@@ -21,6 +21,19 @@ impl Display for InterpreterError<'_> {
             InterpreterErrorType::UndefinedVariable(name) => {
                 format!("Variable {name} is undefined")
             }
+            InterpreterErrorType::NotACallable => {
+                format!(
+                    "Value {} at line {} is not a callable",
+                    self.token.lexeme(),
+                    self.token.line()
+                )
+            }
+            InterpreterErrorType::WrongArity { original, user } => {
+                format!(
+                    "Function {} called with {user} arguments, but required {original}",
+                    self.token.lexeme()
+                )
+            }
         };
 
         write!(f, "{err_message}\n[line {}]", self.token.line())
@@ -35,6 +48,8 @@ pub enum InterpreterErrorType<'a> {
     WrongBinaryOperands(LoxValue, &'a TokenType, LoxValue),
     DivisionByZero,
     UndefinedVariable(String),
+    NotACallable,
+    WrongArity { original: usize, user: usize },
 }
 
 pub type InterpreterResult<'a, T> = Result<T, InterpreterError<'a>>;

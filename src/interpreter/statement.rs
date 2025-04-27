@@ -3,7 +3,7 @@ use crate::token::Token;
 
 pub type Block = Vec<Statement>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Statement {
     Expression(Expression),
     Print(Expression),
@@ -14,7 +14,7 @@ pub enum Statement {
     FunctionDeclaration {
         name: String,
         parameters: Vec<Token>,
-        body: Box<Statement>,
+        body: Block,
     },
     Block(Block),
     If {

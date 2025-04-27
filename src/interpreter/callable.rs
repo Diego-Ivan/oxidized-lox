@@ -1,30 +1,28 @@
 use crate::interpreter::statement::Block;
-use crate::interpreter::{Interpreter, InterpreterResult, LoxValue};
+use crate::interpreter::{InterpreterResult, LoxValue};
 use crate::token::Token;
+use std::fmt::{Debug, Formatter};
 
-pub type NativeFunc<'a> =
-    fn(interpreter: &Interpreter, args: &'a [Token]) -> InterpreterResult<'a, LoxValue>;
+pub type NativeFunc = fn(args: &[LoxValue]) -> InterpreterResult<LoxValue>;
 
-#[derive(Debug)]
-pub enum Callable<'a> {
+#[derive(Clone)]
+pub enum Callable {
     Native {
-        func: NativeFunc<'a>,
-        args: Vec<Token>,
+        func: NativeFunc,
+        arity: usize,
     },
     LoxFunction {
+        name: String,
+        params: Vec<Token>,
         block: Block,
-        arguments: Vec<Token>,
     },
 }
 
-impl<'a> Callable<'a> {
-    pub fn call(&'a self, interpreter: &'a Interpreter) -> InterpreterResult<'a, LoxValue> {
+impl Debug for Callable {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Native { func, args } => func(interpreter, args),
-            Self::LoxFunction {
-                block: _,
-                arguments: _,
-            } => todo!(),
+            Self::Native { func: _, arity: _ } => f.write_str("<native fun>"),
+            Self::LoxFunction { name, .. } => write!(f, "<fun {name}>"),
         }
     }
 }
