@@ -23,6 +23,11 @@ pub struct Interpreter {
     environment_stack: RefCell<Vec<RcEnvironment>>,
 }
 
+pub enum ControlFlow {
+    Normal,
+    Return(LoxValue),
+}
+
 impl Interpreter {
     pub fn new() -> Self {
         let globals = Rc::new(RefCell::new(Environment::new()));
@@ -42,14 +47,16 @@ impl Interpreter {
         Ok(())
     }
 
-    fn execute_statement(&self, statement: &Statement) -> InterpreterResult<()> {
+    fn execute_statement(&self, statement: &Statement) -> InterpreterResult<ControlFlow> {
         match statement {
             Statement::Expression(expr) => {
                 self.evaluate(expr)?;
+                Ok(ControlFlow::Normal)
             }
             Statement::Print(expr) => {
                 let result = self.evaluate(expr)?;
                 println!("{result}");
+                Ok(ControlFlow::Normal)
             }
             Statement::VariableDeclaration { name, initializer } => {
                 let initial = match initializer.as_ref() {
@@ -59,6 +66,8 @@ impl Interpreter {
                 let env_stack = self.environment_stack.borrow_mut();
                 let mut env = env_stack.last().unwrap().borrow_mut();
                 env.define(name.to_string(), initial);
+
+                Ok(ControlFlow::Normal)
             }
             Statement::Block(statements) => {
                 let current_env = {
@@ -67,7 +76,8 @@ impl Interpreter {
                 };
 
                 let enclosure = Environment::new_enclosed(current_env);
-                self.execute_block(statements, Rc::new(RefCell::new(enclosure)))?;
+
+                self.execute_block(statements, Rc::new(RefCell::new(enclosure)))
             }
             Statement::If {
                 condition,
@@ -77,15 +87,18 @@ impl Interpreter {
                 let result = self.evaluate(condition)?.is_truthy();
 
                 if result {
-                    self.execute_statement(then_branch)?;
+                    self.execute_statement(then_branch)
                 } else if let Some(else_branch) = else_branch {
-                    self.execute_statement(else_branch)?;
+                    self.execute_statement(else_branch)
+                } else {
+                    Ok(ControlFlow::Normal)
                 }
             }
             Statement::While { condition, body } => {
                 while self.evaluate(condition)?.is_truthy() {
                     self.execute_statement(body)?;
                 }
+                Ok(ControlFlow::Normal)
             }
             Statement::FunctionDeclaration {
                 name,
@@ -100,16 +113,26 @@ impl Interpreter {
 
                 let mut global = self.globals.borrow_mut();
                 global.define(name.clone(), LoxValue::Callable(Rc::new(function)));
+                Ok(ControlFlow::Normal)
+            }
+            Statement::Return {
+                keyword: _,
+                expression,
+            } => {
+                let value = match expression {
+                    Some(expression) => self.evaluate(expression)?,
+                    None => LoxValue::Nil,
+                };
+                Ok(ControlFlow::Return(value))
             }
         }
-        Ok(())
     }
 
     fn execute_block(
         &self,
         statements: &[Statement],
         env: Rc<RefCell<Environment>>,
-    ) -> InterpreterResult<()> {
+    ) -> InterpreterResult<ControlFlow> {
         for statement in statements {
             {
                 let mut env_mut = self.environment_stack.borrow_mut();
@@ -119,10 +142,13 @@ impl Interpreter {
             let result = self.execute_statement(statement);
             self.environment_stack.borrow_mut().pop();
 
-            result?;
+            match result? {
+                ControlFlow::Normal => continue,
+                ControlFlow::Return(val) => return Ok(ControlFlow::Return(val)),
+            }
         }
 
-        Ok(())
+        Ok(ControlFlow::Normal)
     }
 
     fn evaluate(&self, expression: &Expression) -> InterpreterResult<LoxValue> {
@@ -240,8 +266,12 @@ impl Interpreter {
             function_env.define(params[i].lexeme().to_string(), arg);
         }
 
-        self.execute_block(block, Rc::new(RefCell::new(function_env)))?;
-        Ok(LoxValue::Nil)
+        let value = match self.execute_block(block, Rc::new(RefCell::new(function_env)))? {
+            ControlFlow::Normal => LoxValue::Nil,
+            ControlFlow::Return(val) => val,
+        };
+
+        Ok(value)
     }
 
     fn evaluate_native(

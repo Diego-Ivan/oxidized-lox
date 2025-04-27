@@ -29,7 +29,7 @@ pub(super) fn random(args: &[LoxValue]) -> NativeResult<LoxValue> {
         }
     };
 
-    if (inf > sup) {
+    if inf > sup {
         std::mem::swap(&mut inf, &mut sup);
     }
 

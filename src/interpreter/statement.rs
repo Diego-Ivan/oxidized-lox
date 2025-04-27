@@ -26,4 +26,8 @@ pub enum Statement {
         condition: Expression,
         body: Box<Statement>,
     },
+    Return {
+        keyword: Token,
+        expression: Option<Expression>,
+    },
 }

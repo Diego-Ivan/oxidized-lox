@@ -13,8 +13,6 @@ pub enum ParserError {
     InvalidAssignmentTarget(Expression),
     #[error("Token {0:?} has too many arguments (max: {MAX_ARGS})")]
     TooManyArgs(Token),
-    #[error("Expected Block statement")]
-    ExpectedBlock,
 }
 
 type ParserResult<T> = Result<T, ParserError>;
@@ -191,6 +189,10 @@ impl<'a> Parser<'a> {
                 self.advance();
                 self.parse_while_statement()
             }
+            TokenType::Return => {
+                self.advance();
+                self.parse_return_statement()
+            }
             _ => self.parse_expression_statement(),
         }
     }
@@ -306,6 +308,22 @@ impl<'a> Parser<'a> {
         };
 
         Ok(body)
+    }
+
+    fn parse_return_statement(&mut self) -> ParserResult<Statement> {
+        let keyword = self.previous().unwrap().clone();
+        let expression = if !check_token!(self, TokenType::Semicolon) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        expect_token!(self, TokenType::Semicolon, Semicolon);
+
+        Ok(Statement::Return {
+            expression,
+            keyword,
+        })
     }
 
     fn expression(&mut self) -> ParserResult<Expression> {
