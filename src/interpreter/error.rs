@@ -8,6 +8,31 @@ pub struct InterpreterError {
     pub token: Token,
 }
 
+#[derive(Debug)]
+pub enum InterpreterErrorType {
+    WrongUnaryOperands(TokenType, LoxValue),
+    WrongBinaryOperands(LoxValue, TokenType, LoxValue),
+    DivisionByZero,
+    UndefinedVariable(String),
+    NotACallable,
+    WrongArity { original: usize, user: usize },
+    Native(NativeError),
+}
+
+pub type InterpreterResult<T> = Result<T, InterpreterError>;
+
+#[derive(Debug, thiserror::Error)]
+pub enum NativeError {
+    #[error("IO Error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("Error parsing number: {0}")]
+    NumParse(#[from] std::num::ParseFloatError),
+    #[error("System Time Error: {0}")]
+    SystemTime(#[from] std::time::SystemTimeError),
+}
+
+pub type NativeResult<T> = Result<T, NativeError>;
+
 impl Display for InterpreterError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let err_message = match &self.error_type {
@@ -34,6 +59,9 @@ impl Display for InterpreterError {
                     self.token.lexeme()
                 )
             }
+            InterpreterErrorType::Native(err) => {
+                format!("Native Error - {err}")
+            }
         };
 
         write!(f, "{err_message}\n[line {}]", self.token.line())
@@ -41,15 +69,3 @@ impl Display for InterpreterError {
 }
 
 impl std::error::Error for InterpreterError {}
-
-#[derive(Debug)]
-pub enum InterpreterErrorType {
-    WrongUnaryOperands(TokenType, LoxValue),
-    WrongBinaryOperands(LoxValue, TokenType, LoxValue),
-    DivisionByZero,
-    UndefinedVariable(String),
-    NotACallable,
-    WrongArity { original: usize, user: usize },
-}
-
-pub type InterpreterResult<T> = Result<T, InterpreterError>;

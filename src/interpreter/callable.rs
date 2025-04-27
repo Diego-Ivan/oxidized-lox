@@ -1,9 +1,9 @@
 use crate::interpreter::statement::Block;
-use crate::interpreter::{InterpreterResult, LoxValue};
+use crate::interpreter::{LoxValue, NativeResult};
 use crate::token::Token;
 use std::fmt::{Debug, Formatter};
 
-pub type NativeFunc = fn(args: &[LoxValue]) -> InterpreterResult<LoxValue>;
+pub type NativeFunc = fn(args: &[LoxValue]) -> NativeResult<LoxValue>;
 
 #[derive(Clone)]
 pub enum Callable {

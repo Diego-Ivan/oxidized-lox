@@ -6,8 +6,9 @@ pub mod statement;
 mod value;
 
 use crate::expression::Expression;
-use crate::interpreter::callable::Callable;
+use crate::interpreter::callable::{Callable, NativeFunc};
 use crate::interpreter::environment::Environment;
+use crate::interpreter::statement::Block;
 use crate::token::{Token, TokenType};
 pub use error::*;
 pub use statement::Statement;
@@ -188,7 +189,12 @@ impl Interpreter {
             } => {
                 let function = match self.evaluate(callee)? {
                     LoxValue::Callable(callable) => callable,
-                    _ => panic!("Not a callable"),
+                    _ => {
+                        return Err(InterpreterError {
+                            token: paren.clone(),
+                            error_type: InterpreterErrorType::NotACallable,
+                        })
+                    }
                 };
 
                 let mut arguments = Vec::new();
@@ -196,10 +202,74 @@ impl Interpreter {
                     arguments.push(self.evaluate(arg)?);
                 }
 
-                todo!()
+                match &*function {
+                    Callable::Native { func, arity } => {
+                        self.evaluate_native(paren, *arity, func, &arguments)
+                    }
+                    Callable::LoxFunction {
+                        name: _,
+                        params,
+                        block,
+                    } => self.evaluate_lox_function(paren, params, arguments, block),
+                }
             }
         }
     }
+
+    fn evaluate_lox_function(
+        &self,
+        token: &Token,
+        params: &[Token],
+        arguments: Vec<LoxValue>,
+        block: &Block,
+    ) -> InterpreterResult<LoxValue> {
+        let mut function_env =
+            Environment::new_enclosed(self.environment_stack.borrow().last().unwrap().clone());
+
+        if params.len() != arguments.len() {
+            return Err(InterpreterError {
+                error_type: InterpreterErrorType::WrongArity {
+                    original: params.len(),
+                    user: arguments.len(),
+                },
+                token: token.clone(),
+            });
+        }
+
+        for (i, arg) in arguments.into_iter().enumerate() {
+            function_env.define(params[i].lexeme().to_string(), arg);
+        }
+
+        self.execute_block(block, Rc::new(RefCell::new(function_env)))?;
+        Ok(LoxValue::Nil)
+    }
+
+    fn evaluate_native(
+        &self,
+        token: &Token,
+        arity: usize,
+        func: &NativeFunc,
+        arguments: &[LoxValue],
+    ) -> InterpreterResult<LoxValue> {
+        if arity != arguments.len() {
+            return Err(InterpreterError {
+                error_type: InterpreterErrorType::WrongArity {
+                    original: arity,
+                    user: arguments.len(),
+                },
+                token: token.clone(),
+            });
+        }
+
+        match func(arguments) {
+            Ok(result) => Ok(result),
+            Err(e) => Err(InterpreterError {
+                token: token.clone(),
+                error_type: InterpreterErrorType::Native(e),
+            }),
+        }
+    }
+
     fn evaluate_unary(
         &self,
         token: &Token,
@@ -306,6 +376,9 @@ impl Interpreter {
             }};
         }
 
-        define_native!("clock", 0, native::clock_native);
+        define_native!("clock", 0, native::clock);
+        define_native!("read_line", 0, native::read_line);
+        define_native!("random", 2, native::random);
+        define_native!("string_to_number", 1, native::string_to_number);
     }
 }
