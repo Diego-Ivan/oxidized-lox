@@ -34,14 +34,14 @@ impl Interpreter {
         interpreter
     }
 
-    pub fn interpret<'a>(&'a self, statements: &'a [Statement]) -> InterpreterResult<'a, ()> {
+    pub fn interpret(&self, statements: &[Statement]) -> InterpreterResult<()> {
         for statement in statements {
             self.execute_statement(statement)?;
         }
         Ok(())
     }
 
-    fn execute_statement<'a>(&'a self, statement: &'a Statement) -> InterpreterResult<'a, ()> {
+    fn execute_statement(&self, statement: &Statement) -> InterpreterResult<()> {
         match statement {
             Statement::Expression(expr) => {
                 self.evaluate(expr)?;
@@ -104,11 +104,11 @@ impl Interpreter {
         Ok(())
     }
 
-    fn execute_block<'a>(
-        &'a self,
-        statements: &'a [Statement],
+    fn execute_block(
+        &self,
+        statements: &[Statement],
         env: Rc<RefCell<Environment>>,
-    ) -> InterpreterResult<'a, ()> {
+    ) -> InterpreterResult<()> {
         for statement in statements {
             {
                 let mut env_mut = self.environment_stack.borrow_mut();
@@ -124,7 +124,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn evaluate<'a>(&'a self, expression: &'a Expression) -> InterpreterResult<'a, LoxValue> {
+    fn evaluate(&self, expression: &Expression) -> InterpreterResult<LoxValue> {
         match expression {
             Expression::True => Ok(LoxValue::Boolean(true)),
             Expression::False => Ok(LoxValue::Boolean(false)),
@@ -140,13 +140,13 @@ impl Interpreter {
             } => self.evaluate_binary(left, operator, right),
             Expression::Var { name, token } => {
                 let env_stack = self.environment_stack.borrow_mut();
-                let mut env = env_stack.last().unwrap().borrow_mut();
+                let env = env_stack.last().unwrap().borrow();
                 let value = match env.get(name) {
                     Some(value) => value,
                     None => {
                         return Err(InterpreterError {
                             error_type: InterpreterErrorType::UndefinedVariable(name.to_string()),
-                            token,
+                            token: token.clone(),
                         })
                     }
                 };
@@ -160,7 +160,7 @@ impl Interpreter {
                 if !env.set(name.clone(), value.clone()) {
                     return Err(InterpreterError {
                         error_type: InterpreterErrorType::UndefinedVariable(name.clone()),
-                        token,
+                        token: token.clone(),
                     });
                 }
                 Ok(value)
@@ -200,11 +200,11 @@ impl Interpreter {
             }
         }
     }
-    fn evaluate_unary<'a>(
-        &'a self,
-        token: &'a Token,
-        expression: &'a Expression,
-    ) -> InterpreterResult<'a, LoxValue> {
+    fn evaluate_unary(
+        &self,
+        token: &Token,
+        expression: &Expression,
+    ) -> InterpreterResult<LoxValue> {
         match (token.token_type(), self.evaluate(expression)?) {
             /* Numerical negation */
             (TokenType::Minus, LoxValue::Number(num)) => Ok(LoxValue::Number(-num)),
@@ -219,18 +219,18 @@ impl Interpreter {
             /* Any other number is truthy */
             (TokenType::Bang, LoxValue::Number(_)) => Ok(LoxValue::Boolean(false)),
             (op, expr) => Err(InterpreterError {
-                error_type: InterpreterErrorType::WrongUnaryOperands(op, expr),
-                token,
+                error_type: InterpreterErrorType::WrongUnaryOperands(op.clone(), expr),
+                token: token.clone(),
             }),
         }
     }
 
-    fn evaluate_binary<'a>(
-        &'a self,
-        first_operand: &'a Expression,
-        operator: &'a Token,
-        second_operand: &'a Expression,
-    ) -> InterpreterResult<'a, LoxValue> {
+    fn evaluate_binary(
+        &self,
+        first_operand: &Expression,
+        operator: &Token,
+        second_operand: &Expression,
+    ) -> InterpreterResult<LoxValue> {
         match (
             self.evaluate(first_operand)?,
             operator.token_type(),
@@ -251,7 +251,7 @@ impl Interpreter {
             (LoxValue::Number(_), TokenType::Slash, LoxValue::Number(0f64)) => {
                 Err(InterpreterError {
                     error_type: InterpreterErrorType::DivisionByZero,
-                    token: operator,
+                    token: operator.clone(),
                 })
             }
             (LoxValue::Number(a), TokenType::Slash, LoxValue::Number(b)) => {
@@ -287,8 +287,8 @@ impl Interpreter {
 
             /* Any other invalid operation will be handled here. */
             (t1, op, t2) => Err(InterpreterError {
-                token: operator,
-                error_type: InterpreterErrorType::WrongBinaryOperands(t1, op, t2),
+                token: operator.clone(),
+                error_type: InterpreterErrorType::WrongBinaryOperands(t1, op.clone(), t2),
             }),
         }
     }
