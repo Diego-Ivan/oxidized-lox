@@ -17,6 +17,7 @@ pub enum InterpreterErrorType {
     NotACallable,
     WrongArity { original: usize, user: usize },
     Native(NativeError),
+    NotInLoop,
 }
 
 pub type InterpreterResult<T> = Result<T, InterpreterError>;
@@ -62,6 +63,7 @@ impl Display for InterpreterError {
             InterpreterErrorType::Native(err) => {
                 format!("Native Error - {err}")
             }
+            InterpreterErrorType::NotInLoop => String::from("Used Return statement outside a loop"),
         };
 
         write!(f, "{err_message}\n[line {}]", self.token.line())

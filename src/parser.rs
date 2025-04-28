@@ -193,6 +193,14 @@ impl<'a> Parser<'a> {
                 self.advance();
                 self.parse_return_statement()
             }
+            TokenType::Break => {
+                let keyword = token.clone();
+
+                self.advance();
+                expect_token!(self, TokenType::Semicolon, Semicolon);
+
+                Ok(Statement::Break { keyword })
+            }
             _ => self.parse_expression_statement(),
         }
     }

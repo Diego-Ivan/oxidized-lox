@@ -30,4 +30,7 @@ pub enum Statement {
         keyword: Token,
         expression: Option<Expression>,
     },
+    Break {
+        keyword: Token,
+    },
 }

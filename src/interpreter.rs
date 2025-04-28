@@ -23,8 +23,10 @@ pub struct Interpreter {
     environment_stack: RefCell<Vec<RcEnvironment>>,
 }
 
+#[must_use]
 pub enum ControlFlow {
     Normal,
+    BreakLoop,
     Return(LoxValue),
 }
 
@@ -42,12 +44,16 @@ impl Interpreter {
 
     pub fn interpret(&self, statements: &[Statement]) -> InterpreterResult<()> {
         for statement in statements {
-            self.execute_statement(statement)?;
+            let _ = self.execute_statement(statement, false)?;
         }
         Ok(())
     }
 
-    fn execute_statement(&self, statement: &Statement) -> InterpreterResult<ControlFlow> {
+    fn execute_statement(
+        &self,
+        statement: &Statement,
+        inside_loop: bool,
+    ) -> InterpreterResult<ControlFlow> {
         match statement {
             Statement::Expression(expr) => {
                 self.evaluate(expr)?;
@@ -77,7 +83,7 @@ impl Interpreter {
 
                 let enclosure = Environment::new_enclosed(current_env);
 
-                self.execute_block(statements, Rc::new(RefCell::new(enclosure)))
+                self.execute_block(statements, Rc::new(RefCell::new(enclosure)), inside_loop)
             }
             Statement::If {
                 condition,
@@ -87,16 +93,20 @@ impl Interpreter {
                 let result = self.evaluate(condition)?.is_truthy();
 
                 if result {
-                    self.execute_statement(then_branch)
+                    self.execute_statement(then_branch, inside_loop)
                 } else if let Some(else_branch) = else_branch {
-                    self.execute_statement(else_branch)
+                    self.execute_statement(else_branch, inside_loop)
                 } else {
                     Ok(ControlFlow::Normal)
                 }
             }
             Statement::While { condition, body } => {
                 while self.evaluate(condition)?.is_truthy() {
-                    self.execute_statement(body)?;
+                    match self.execute_statement(body, true)? {
+                        ControlFlow::BreakLoop => break,
+                        ControlFlow::Return(val) => return Ok(ControlFlow::Return(val)),
+                        ControlFlow::Normal => {}
+                    };
                 }
                 Ok(ControlFlow::Normal)
             }
@@ -129,6 +139,11 @@ impl Interpreter {
                 };
                 Ok(ControlFlow::Return(value))
             }
+            Statement::Break { .. } if inside_loop => Ok(ControlFlow::BreakLoop),
+            Statement::Break { keyword } => Err(InterpreterError {
+                error_type: InterpreterErrorType::NotInLoop,
+                token: keyword.clone(),
+            }),
         }
     }
 
@@ -136,6 +151,7 @@ impl Interpreter {
         &self,
         statements: &[Statement],
         env: Rc<RefCell<Environment>>,
+        inside_loop: bool,
     ) -> InterpreterResult<ControlFlow> {
         for statement in statements {
             {
@@ -143,11 +159,12 @@ impl Interpreter {
                 env_mut.push(env.clone());
             }
 
-            let result = self.execute_statement(statement);
+            let result = self.execute_statement(statement, inside_loop);
             self.environment_stack.borrow_mut().pop();
 
             match result? {
                 ControlFlow::Normal => continue,
+                ControlFlow::BreakLoop => return Ok(ControlFlow::BreakLoop),
                 ControlFlow::Return(val) => return Ok(ControlFlow::Return(val)),
             }
         }
@@ -273,8 +290,9 @@ impl Interpreter {
             function_env.define(params[i].lexeme().to_string(), arg);
         }
 
-        let value = match self.execute_block(block, Rc::new(RefCell::new(function_env)))? {
+        let value = match self.execute_block(block, Rc::new(RefCell::new(function_env)), false)? {
             ControlFlow::Normal => LoxValue::Nil,
+            ControlFlow::BreakLoop => LoxValue::Nil,
             ControlFlow::Return(val) => val,
         };
 
