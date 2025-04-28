@@ -201,6 +201,14 @@ impl<'a> Parser<'a> {
 
                 Ok(Statement::Break { keyword })
             }
+            TokenType::Continue => {
+                let keyword = token.clone();
+
+                self.advance();
+                expect_token!(self, TokenType::Semicolon, Semicolon);
+
+                Ok(Statement::Continue { keyword })
+            }
             _ => self.parse_expression_statement(),
         }
     }
@@ -276,18 +284,19 @@ impl<'a> Parser<'a> {
         let initializer = if match_token!(self, TokenType::Semicolon) {
             None
         } else if match_token!(self, TokenType::Var) {
-            Some(self.variable_declaration()?)
+            Some(Box::new(self.variable_declaration()?))
         } else {
-            Some(self.parse_expression_statement()?)
+            Some(Box::new(self.parse_expression_statement()?))
         };
 
         let condition = if match_token!(self, TokenType::Semicolon) {
-            Expression::True
+            None
         } else {
-            self.expression()?
-        };
+            let expr = Some(self.expression()?);
+            expect_token!(self, TokenType::Semicolon, Semicolon);
 
-        expect_token!(self, TokenType::Semicolon, Semicolon);
+            expr
+        };
 
         let increment = if match_token!(self, TokenType::RightParen) {
             None
@@ -297,25 +306,14 @@ impl<'a> Parser<'a> {
             inc
         };
 
-        let body = self.parse_statement()?;
+        let body = Box::new(self.parse_statement()?);
 
-        let body = match increment {
-            Some(increment) => Statement::While {
-                body: Box::new(Statement::Block(vec![
-                    body,
-                    Statement::Expression(increment),
-                ])),
-                condition,
-            },
-            None => body,
-        };
-
-        let body = match initializer {
-            Some(initializer) => Statement::Block(vec![initializer, body]),
-            None => body,
-        };
-
-        Ok(body)
+        Ok(Statement::For {
+            initializer,
+            condition,
+            increment,
+            body,
+        })
     }
 
     fn parse_return_statement(&mut self) -> ParserResult<Statement> {
@@ -601,7 +599,10 @@ impl<'a> Parser<'a> {
             }
 
             let next = self.peek().unwrap().token_type();
-            if matches!(next, Class | Fun | Var | For | If | While | Print | Return) {
+            if matches!(
+                next,
+                Class | Fun | Var | For | If | While | Print | Return | Continue
+            ) {
                 return;
             }
             self.advance();

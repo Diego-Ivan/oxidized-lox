@@ -63,7 +63,9 @@ impl Display for InterpreterError {
             InterpreterErrorType::Native(err) => {
                 format!("Native Error - {err}")
             }
-            InterpreterErrorType::NotInLoop => String::from("Used Return statement outside a loop"),
+            InterpreterErrorType::NotInLoop => {
+                format!("Used {} statement outside a loop", self.token.lexeme())
+            }
         };
 
         write!(f, "{err_message}\n[line {}]", self.token.line())

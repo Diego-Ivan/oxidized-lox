@@ -40,6 +40,7 @@ impl<'a> Scanner<'a> {
         insert_token!("print", Print);
         insert_token!("return", Return);
         insert_token!("break", Break);
+        insert_token!("continue", Continue);
         insert_token!("super", Super);
         insert_token!("this", This);
         insert_token!("true", True);

@@ -26,11 +26,20 @@ pub enum Statement {
         condition: Expression,
         body: Box<Statement>,
     },
+    For {
+        initializer: Option<Box<Statement>>,
+        condition: Option<Expression>,
+        increment: Option<Expression>,
+        body: Box<Statement>,
+    },
     Return {
         keyword: Token,
         expression: Option<Expression>,
     },
     Break {
+        keyword: Token,
+    },
+    Continue {
         keyword: Token,
     },
 }

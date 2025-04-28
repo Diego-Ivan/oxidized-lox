@@ -43,6 +43,7 @@ pub enum TokenType {
     Print,
     Return,
     Break,
+    Continue,
     Super,
     This,
     True,

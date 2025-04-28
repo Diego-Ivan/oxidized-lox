@@ -27,6 +27,7 @@ pub struct Interpreter {
 pub enum ControlFlow {
     Normal,
     BreakLoop,
+    ContinueLoop,
     Return(LoxValue),
 }
 
@@ -105,9 +106,46 @@ impl Interpreter {
                     match self.execute_statement(body, true)? {
                         ControlFlow::BreakLoop => break,
                         ControlFlow::Return(val) => return Ok(ControlFlow::Return(val)),
+                        ControlFlow::ContinueLoop => continue,
                         ControlFlow::Normal => {}
                     };
                 }
+                Ok(ControlFlow::Normal)
+            }
+            Statement::For {
+                initializer,
+                condition,
+                increment,
+                body,
+            } => {
+                if let Some(initializer) = initializer {
+                    let _ = self.execute_statement(initializer, false)?;
+                }
+
+                loop {
+                    if let Some(condition) = condition {
+                        if !self.evaluate(condition)?.is_truthy() {
+                            break;
+                        }
+                    }
+
+                    match self.execute_statement(body, true)? {
+                        ControlFlow::Normal => {}
+                        ControlFlow::BreakLoop => break,
+                        ControlFlow::Return(val) => return Ok(ControlFlow::Return(val)),
+                        ControlFlow::ContinueLoop => {
+                            if let Some(increment) = increment {
+                                self.evaluate(increment)?;
+                            }
+                            continue;
+                        }
+                    };
+
+                    if let Some(increment) = increment {
+                        self.evaluate(increment)?;
+                    }
+                }
+
                 Ok(ControlFlow::Normal)
             }
             Statement::FunctionDeclaration {
@@ -140,10 +178,13 @@ impl Interpreter {
                 Ok(ControlFlow::Return(value))
             }
             Statement::Break { .. } if inside_loop => Ok(ControlFlow::BreakLoop),
-            Statement::Break { keyword } => Err(InterpreterError {
-                error_type: InterpreterErrorType::NotInLoop,
-                token: keyword.clone(),
-            }),
+            Statement::Continue { .. } if inside_loop => Ok(ControlFlow::ContinueLoop),
+            Statement::Break { keyword } | Statement::Continue { keyword } => {
+                Err(InterpreterError {
+                    error_type: InterpreterErrorType::NotInLoop,
+                    token: keyword.clone(),
+                })
+            }
         }
     }
 
@@ -165,6 +206,7 @@ impl Interpreter {
             match result? {
                 ControlFlow::Normal => continue,
                 ControlFlow::BreakLoop => return Ok(ControlFlow::BreakLoop),
+                ControlFlow::ContinueLoop => return Ok(ControlFlow::ContinueLoop),
                 ControlFlow::Return(val) => return Ok(ControlFlow::Return(val)),
             }
         }
@@ -293,6 +335,7 @@ impl Interpreter {
         let value = match self.execute_block(block, Rc::new(RefCell::new(function_env)), false)? {
             ControlFlow::Normal => LoxValue::Nil,
             ControlFlow::BreakLoop => LoxValue::Nil,
+            ControlFlow::ContinueLoop => LoxValue::Nil,
             ControlFlow::Return(val) => val,
         };
 

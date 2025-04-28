@@ -1,5 +1,5 @@
 use crate::interpreter::callable::Callable;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
 
 #[derive(Debug, Clone)]
@@ -30,7 +30,7 @@ impl Display for LoxValue {
             Self::Nil => write!(f, "nil"),
             Self::Boolean(b) => write!(f, "{b}"),
             Self::Number(n) => write!(f, "{n}"),
-            Self::String(str) => write!(f, "\"{str}\""),
+            Self::String(str) => f.write_str(str),
             Self::Callable(callable) => write!(f, "{callable:?}"),
         }
     }
