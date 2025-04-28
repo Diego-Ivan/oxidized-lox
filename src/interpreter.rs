@@ -105,7 +105,11 @@ impl Interpreter {
                 parameters,
                 body,
             } => {
+                let env_stack = self.environment_stack.borrow();
+                let current_env = env_stack.last().unwrap();
+
                 let function = Callable::LoxFunction {
+                    closure: current_env.clone(),
                     name: name.clone(),
                     params: parameters.clone(),
                     block: body.clone(),
@@ -234,9 +238,12 @@ impl Interpreter {
                     }
                     Callable::LoxFunction {
                         name: _,
+                        closure,
                         params,
                         block,
-                    } => self.evaluate_lox_function(paren, params, arguments, block),
+                    } => {
+                        self.evaluate_lox_function(paren, closure.clone(), params, arguments, block)
+                    }
                 }
             }
         }
@@ -245,12 +252,12 @@ impl Interpreter {
     fn evaluate_lox_function(
         &self,
         token: &Token,
+        closure: Rc<RefCell<Environment>>,
         params: &[Token],
         arguments: Vec<LoxValue>,
         block: &Block,
     ) -> InterpreterResult<LoxValue> {
-        let mut function_env =
-            Environment::new_enclosed(self.environment_stack.borrow().last().unwrap().clone());
+        let mut function_env = Environment::new_enclosed(closure);
 
         if params.len() != arguments.len() {
             return Err(InterpreterError {

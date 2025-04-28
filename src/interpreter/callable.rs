@@ -1,7 +1,10 @@
+use crate::interpreter::environment::Environment;
 use crate::interpreter::statement::Block;
 use crate::interpreter::{LoxValue, NativeResult};
 use crate::token::Token;
+use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
+use std::rc::Rc;
 
 pub type NativeFunc = fn(args: &[LoxValue]) -> NativeResult<LoxValue>;
 
@@ -12,6 +15,7 @@ pub enum Callable {
         arity: usize,
     },
     LoxFunction {
+        closure: Rc<RefCell<Environment>>,
         name: String,
         params: Vec<Token>,
         block: Block,
