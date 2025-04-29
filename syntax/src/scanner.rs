@@ -116,7 +116,7 @@ impl<'a> Scanner<'a> {
             // An identifier can start with an alphabetic character or with an underscore.
             b'A'..=b'Z' | b'a'..=b'z' | b'_' => self.consume_identifier(),
             b'0'..=b'9' => self.consume_number(),
-            any => crate::error(self.line, &format!("Unexpected character {any}")),
+            any => todo!("Unexpected character {any}"),
         };
     }
 
@@ -184,7 +184,7 @@ impl<'a> Scanner<'a> {
 
         if self.is_at_end() {
             println!("{:?}", self.peek());
-            crate::error(self.line, "Unterminated string literal");
+            todo!("Unterminated string literal");
             return;
         }
 

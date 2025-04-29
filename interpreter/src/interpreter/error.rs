@@ -1,17 +1,16 @@
 use super::LoxValue;
-use crate::token::{Token, TokenType};
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug)]
 pub struct InterpreterError {
     pub error_type: InterpreterErrorType,
-    pub token: Token,
+    pub token: syntax::Token,
 }
 
 #[derive(Debug)]
 pub enum InterpreterErrorType {
-    WrongUnaryOperands(TokenType, LoxValue),
-    WrongBinaryOperands(LoxValue, TokenType, LoxValue),
+    WrongUnaryOperands(syntax::token::TokenType, LoxValue),
+    WrongBinaryOperands(LoxValue, syntax::token::TokenType, LoxValue),
     DivisionByZero,
     UndefinedVariable(String),
     NotACallable,
@@ -42,7 +41,9 @@ impl Display for InterpreterError {
             }
             InterpreterErrorType::DivisionByZero => String::from("Division by zero"),
             InterpreterErrorType::WrongBinaryOperands(t1, op, t2) => {
-                format!("Operation of type: {op:?} cannot be applied over operands of types {t1:?} and {t2:?}")
+                format!(
+                    "Operation of type: {op:?} cannot be applied over operands of types {t1:?} and {t2:?}"
+                )
             }
             InterpreterErrorType::UndefinedVariable(name) => {
                 format!("Variable {name} is undefined")

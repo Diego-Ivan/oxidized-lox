@@ -2,18 +2,17 @@ mod callable;
 mod environment;
 mod error;
 mod native;
-pub mod statement;
 mod value;
 
-use crate::expression::Expression;
 use crate::interpreter::callable::{Callable, NativeFunc};
 use crate::interpreter::environment::Environment;
-use crate::interpreter::statement::Block;
-use crate::token::{Token, TokenType};
 pub use error::*;
-pub use statement::Statement;
 use std::cell::RefCell;
 use std::rc::Rc;
+use syntax::statement::Block;
+pub use syntax::statement::Statement;
+use syntax::token::{Token, TokenType};
+use syntax::Expression;
 pub use value::LoxValue;
 
 type RcEnvironment = Rc<RefCell<Environment>>;
@@ -237,7 +236,7 @@ impl Interpreter {
                         return Err(InterpreterError {
                             error_type: InterpreterErrorType::UndefinedVariable(name.to_string()),
                             token: token.clone(),
-                        })
+                        });
                     }
                 };
                 Ok(value.clone())
@@ -282,7 +281,7 @@ impl Interpreter {
                         return Err(InterpreterError {
                             token: paren.clone(),
                             error_type: InterpreterErrorType::NotACallable,
-                        })
+                        });
                     }
                 };
 

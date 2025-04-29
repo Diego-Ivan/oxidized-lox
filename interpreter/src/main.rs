@@ -1,14 +1,6 @@
-mod expression;
 mod interpreter;
-mod parser;
-mod scanner;
-mod token;
-mod utf8;
 
-use crate::expression::Expression;
 use crate::interpreter::{Interpreter, InterpreterError};
-use crate::parser::Parser;
-use crate::scanner::Scanner;
 use std::io::{Read, Result as IOResult};
 use std::path::Path;
 use std::process::ExitCode;
@@ -39,10 +31,10 @@ fn main() -> ExitCode {
 }
 
 fn run(source: &str, interpreter: &Interpreter) {
-    let mut scanner = Scanner::new(source);
+    let mut scanner = syntax::Scanner::new(source);
     let tokens = scanner.scan_tokens();
 
-    let mut parser = Parser::new(tokens);
+    let mut parser = syntax::Parser::new(tokens);
     let statements = match parser.statements() {
         Ok(stmts) => stmts,
         Err(e) => {

@@ -1,6 +1,6 @@
-use crate::interpreter::statement::{Block, Statement};
+use crate::expression::Expression;
+use crate::statement::{Block, Statement};
 use crate::token::{Token, TokenType};
-use crate::Expression;
 use thiserror::Error;
 
 const MAX_ARGS: usize = 255;
