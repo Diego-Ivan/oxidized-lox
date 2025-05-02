@@ -172,17 +172,24 @@ impl<'a> Scanner<'a> {
     }
 
     fn consume_string(&mut self) {
+        let mut completed = false;
         while let Some(c) = self.peek() {
             match c {
-                b'\n' => self.line += 1,
-                b'"' => break,
+                b'\n' => {
+                    self.line += 1;
+                    self.advance();
+                }
+                b'"' => {
+                    completed = true;
+                    break;
+                }
                 _ => _ = self.advance(),
             }
         }
 
         self.advance();
 
-        if self.is_at_end() {
+        if self.is_at_end() && !completed {
             println!("{:?}", self.peek());
             todo!("Unterminated string literal");
             return;
@@ -249,5 +256,76 @@ impl<'a> Scanner<'a> {
         };
 
         self.add_token(token);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::token::TokenType;
+    use crate::Token;
+
+    #[test]
+    fn single_line_string_literal() {
+        let source = "a = \"Hello World\"";
+        let mut scanner = super::Scanner::new(source);
+        let result = scanner.scan_tokens();
+        assert_eq!(
+            result,
+            [
+                Token::new(
+                    TokenType::Identifier(String::from("a")),
+                    String::from("a"),
+                    1
+                ),
+                Token::new(TokenType::Equal, String::from("="), 1),
+                Token::new(
+                    TokenType::String(String::from("Hello World"),),
+                    String::from("\"Hello World\""),
+                    1
+                ),
+                Token::new(TokenType::Eof, String::from(""), 1),
+            ]
+        )
+    }
+
+    #[test]
+    fn multi_line_string_literal() {
+        let source = "a = \"hello\ncrayon\nlets go\"";
+        let mut scanner = super::Scanner::new(source);
+        let result = scanner.scan_tokens();
+        assert_eq!(
+            result,
+            [
+                Token::new(
+                    TokenType::Identifier(String::from("a")),
+                    String::from("a"),
+                    1
+                ),
+                Token::new(TokenType::Equal, String::from("="), 1),
+                Token::new(
+                    TokenType::String(String::from("hello\ncrayon\nlets go"),),
+                    String::from("\"hello\ncrayon\nlets go\""),
+                    3
+                ),
+                Token::new(TokenType::Eof, String::from(""), 3),
+            ]
+        )
+    }
+
+    #[test]
+    fn test_multibyte_tokens() {
+        let source = "== >= <= !=";
+        let mut scanner = super::Scanner::new(source);
+        let result = scanner.scan_tokens();
+        assert_eq!(
+            result,
+            [
+                Token::new(TokenType::EqualEqual, String::from("=="), 1),
+                Token::new(TokenType::GreaterEqual, String::from(">="), 1),
+                Token::new(TokenType::LessEqual, String::from("<="), 1),
+                Token::new(TokenType::BangEqual, String::from("!="), 1),
+                Token::new(TokenType::Eof, String::from(""), 1),
+            ]
+        );
     }
 }

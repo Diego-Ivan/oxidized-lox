@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
     /* Single character tokens */
     LeftParen,
@@ -53,7 +53,7 @@ pub enum TokenType {
     Eof,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Token {
     token_type: TokenType,
     lexeme: String,
