@@ -3,6 +3,18 @@ use std::collections::HashMap;
 
 static DECIMAL_SEPARATOR: u8 = b'.';
 
+#[derive(Debug, thiserror::Error)]
+pub enum ScannerError {
+    #[error("Unterminated string literal")]
+    UnterminatedStringLiteral,
+    #[error("Unexpected character: {0}")]
+    UnexpectedCharacter(u8),
+    #[error("Failed to parse lexeme in line {0}, not an UTF-8 character")]
+    NotUtf8(usize),
+}
+
+pub type ScannerResult<T> = Result<T, ScannerError>;
+
 pub struct Scanner<'a> {
     source: &'a [u8],
     tokens: Vec<Token>,
@@ -57,7 +69,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn scan_token(&mut self) {
+    fn scan_token(&mut self) -> ScannerResult<()> {
         let current = self.advance();
         match current {
             b'(' => self.add_token(TokenType::LeftParen),
@@ -106,18 +118,28 @@ impl<'a> Scanner<'a> {
                         }
                         self.advance();
                     }
+                    Ok(())
                 } else {
                     self.add_token(TokenType::Slash)
                 }
             }
-            b' ' | b'\r' | b'\t' => {}
-            b'\n' => self.line += 1,
+            b' ' | b'\r' | b'\t' => Ok(()),
+            b'\n' => {
+                self.line += 1;
+                Ok(())
+            }
             b'"' => self.consume_string(),
             // An identifier can start with an alphabetic character or with an underscore.
-            b'A'..=b'Z' | b'a'..=b'z' | b'_' => self.consume_identifier(),
-            b'0'..=b'9' => self.consume_number(),
-            any => todo!("Unexpected character {any}"),
-        };
+            b'A'..=b'Z' | b'a'..=b'z' | b'_' => {
+                self.consume_identifier();
+                Ok(())
+            }
+            b'0'..=b'9' => {
+                self.consume_number();
+                Ok(())
+            }
+            any => Err(ScannerError::UnexpectedCharacter(any)),
+        }
     }
 
     fn peek(&self) -> Option<u8> {
@@ -145,33 +167,34 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn add_token(&mut self, token_type: TokenType) {
+    fn add_token(&mut self, token_type: TokenType) -> ScannerResult<()> {
         let lexeme = Vec::from(&self.source[self.start..self.current]);
         let lexeme = match String::from_utf8(lexeme) {
             Ok(lexeme) => lexeme,
-            Err(e) => panic!("Could not parse lexeme into UTF-8: {e}"),
+            Err(e) => return Err(ScannerError::NotUtf8(self.line)),
         };
         let token = Token::new(token_type, lexeme, self.line);
         self.tokens.push(token);
+        Ok(())
     }
 
-    pub fn scan_tokens(&mut self) -> &[Token] {
+    pub fn scan_tokens(&mut self) -> ScannerResult<&[Token]> {
         while !self.is_at_end() {
             self.start = self.current;
-            self.scan_token();
+            self.scan_token()?;
         }
 
         self.tokens
             .push(Token::new(TokenType::Eof, String::new(), self.line));
 
-        &self.tokens
+        Ok(&self.tokens)
     }
 
     fn is_at_end(&self) -> bool {
         self.current >= self.source.len()
     }
 
-    fn consume_string(&mut self) {
+    fn consume_string(&mut self) -> ScannerResult<()> {
         let mut completed = false;
         while let Some(c) = self.peek() {
             match c {
@@ -191,14 +214,15 @@ impl<'a> Scanner<'a> {
 
         if self.is_at_end() && !completed {
             println!("{:?}", self.peek());
-            todo!("Unterminated string literal");
-            return;
+            return Err(ScannerError::UnterminatedStringLiteral);
         }
 
         let string = &self.source[self.start + 1..self.current - 1];
         let string = crate::utf8::convert_byte_slice_into_utf8(string);
 
         self.add_token(TokenType::String(string));
+
+        Ok(())
     }
 
     fn consume_number(&mut self) {
@@ -268,7 +292,7 @@ mod tests {
     fn single_line_string_literal() {
         let source = "a = \"Hello World\"";
         let mut scanner = super::Scanner::new(source);
-        let result = scanner.scan_tokens();
+        let result = scanner.scan_tokens().unwrap();
         assert_eq!(
             result,
             [
@@ -292,7 +316,7 @@ mod tests {
     fn multi_line_string_literal() {
         let source = "a = \"hello\ncrayon\nlets go\"";
         let mut scanner = super::Scanner::new(source);
-        let result = scanner.scan_tokens();
+        let result = scanner.scan_tokens().unwrap();
         assert_eq!(
             result,
             [
@@ -316,7 +340,7 @@ mod tests {
     fn test_multibyte_tokens() {
         let source = "== >= <= !=";
         let mut scanner = super::Scanner::new(source);
-        let result = scanner.scan_tokens();
+        let result = scanner.scan_tokens().unwrap();
         assert_eq!(
             result,
             [
