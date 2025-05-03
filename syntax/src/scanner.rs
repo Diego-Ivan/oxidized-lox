@@ -1,3 +1,5 @@
+mod iterator;
+
 use crate::token::*;
 use std::collections::HashMap;
 
@@ -17,7 +19,6 @@ pub type ScannerResult<T> = Result<T, ScannerError>;
 
 pub struct Scanner<'a> {
     source: &'a [u8],
-    tokens: Vec<Token>,
     start: usize,
     current: usize,
     line: usize,
@@ -61,7 +62,6 @@ impl<'a> Scanner<'a> {
 
         Scanner {
             source: source.as_bytes(),
-            tokens: Vec::new(),
             start: 0,
             current: 0,
             line: 1,
@@ -69,8 +69,9 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn scan_token(&mut self) -> ScannerResult<()> {
-        let current = self.advance();
+    fn scan_token(&mut self) -> ScannerResult<Token> {
+        /* Ignorar whitespace y comentarios */
+        let current = self.skip_whitespace();
         match current {
             b'(' => self.add_token(TokenType::LeftParen),
             b')' => self.add_token(TokenType::RightParen),
@@ -110,35 +111,44 @@ impl<'a> Scanner<'a> {
                     self.add_token(TokenType::Greater)
                 }
             }
-            b'/' => {
-                if self.match_character(b'/') {
-                    while let Some(c) = self.peek() {
-                        if c == b'\n' {
-                            break;
-                        }
-                        self.advance();
-                    }
-                    Ok(())
-                } else {
-                    self.add_token(TokenType::Slash)
-                }
-            }
-            b' ' | b'\r' | b'\t' => Ok(()),
-            b'\n' => {
-                self.line += 1;
-                Ok(())
-            }
+            b'/' => self.add_token(TokenType::Slash),
+
             b'"' => self.consume_string(),
             // An identifier can start with an alphabetic character or with an underscore.
-            b'A'..=b'Z' | b'a'..=b'z' | b'_' => {
-                self.consume_identifier();
-                Ok(())
-            }
-            b'0'..=b'9' => {
-                self.consume_number();
-                Ok(())
-            }
+            b'A'..=b'Z' | b'a'..=b'z' | b'_' => self.consume_identifier(),
+            b'0'..=b'9' => self.consume_number(),
             any => Err(ScannerError::UnexpectedCharacter(any)),
+        }
+    }
+
+    fn skip_whitespace(&mut self) -> u8 {
+        loop {
+            let current = self.advance();
+            match current {
+                b' ' | b'\t' => {
+                    self.start += 1;
+                }
+                b'\n' | b'\r' => {
+                    self.start += 1;
+                    self.line += 1;
+                }
+                // consumir comentarios e ignorarlos
+                b'/' => {
+                    if self.match_character(b'/') {
+                        self.start += 2;
+                        while let Some(c) = self.peek() {
+                            if c == b'\n' {
+                                break;
+                            }
+                            self.start += 1;
+                            self.advance();
+                        }
+                    } else {
+                        break current;
+                    }
+                }
+                _ => break current,
+            }
         }
     }
 
@@ -167,34 +177,34 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn add_token(&mut self, token_type: TokenType) -> ScannerResult<()> {
+    fn add_token(&mut self, token_type: TokenType) -> ScannerResult<Token> {
         let lexeme = Vec::from(&self.source[self.start..self.current]);
         let lexeme = match String::from_utf8(lexeme) {
             Ok(lexeme) => lexeme,
-            Err(e) => return Err(ScannerError::NotUtf8(self.line)),
+            Err(_) => return Err(ScannerError::NotUtf8(self.line)),
         };
         let token = Token::new(token_type, lexeme, self.line);
-        self.tokens.push(token);
-        Ok(())
+        Ok(token)
     }
 
-    pub fn scan_tokens(&mut self) -> ScannerResult<&[Token]> {
+    #[deprecated(note = "Use iterator API instead")]
+    pub fn scan_tokens(&mut self) -> ScannerResult<Vec<Token>> {
+        let mut tokens = Vec::new();
         while !self.is_at_end() {
             self.start = self.current;
-            self.scan_token()?;
+            tokens.push(self.scan_token()?);
         }
 
-        self.tokens
-            .push(Token::new(TokenType::Eof, String::new(), self.line));
+        tokens.push(Token::new(TokenType::Eof, String::new(), self.line));
 
-        Ok(&self.tokens)
+        Ok(tokens)
     }
 
     fn is_at_end(&self) -> bool {
         self.current >= self.source.len()
     }
 
-    fn consume_string(&mut self) -> ScannerResult<()> {
+    fn consume_string(&mut self) -> ScannerResult<Token> {
         let mut completed = false;
         while let Some(c) = self.peek() {
             match c {
@@ -220,12 +230,10 @@ impl<'a> Scanner<'a> {
         let string = &self.source[self.start + 1..self.current - 1];
         let string = crate::utf8::convert_byte_slice_into_utf8(string);
 
-        self.add_token(TokenType::String(string));
-
-        Ok(())
+        self.add_token(TokenType::String(string))
     }
 
-    fn consume_number(&mut self) {
+    fn consume_number(&mut self) -> ScannerResult<Token> {
         // Parse the first digit.
         let mut decimal: f64 = (self.source[self.start] - 0x30) as f64;
         let mut decimal_power = 0;
@@ -260,10 +268,10 @@ impl<'a> Scanner<'a> {
             self.advance();
         }
 
-        self.add_token(TokenType::Number(decimal));
+        self.add_token(TokenType::Number(decimal))
     }
 
-    fn consume_identifier(&mut self) {
+    fn consume_identifier(&mut self) -> ScannerResult<Token> {
         while let Some(c) = self.peek() {
             if !c.is_ascii_alphanumeric() && c != b'_' {
                 break;
@@ -279,20 +287,42 @@ impl<'a> Scanner<'a> {
             None => TokenType::Identifier(identifier),
         };
 
-        self.add_token(token);
+        self.add_token(token)
     }
 }
+
+impl Iterator for Scanner<'_> {
+    type Item = ScannerResult<Token>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.is_at_end() {
+            None
+        } else {
+            self.start = self.current;
+            Some(self.scan_token())
+        }
+    }
+}
+
+impl std::iter::FusedIterator for Scanner<'_> {}
 
 #[cfg(test)]
 mod tests {
     use crate::token::TokenType;
     use crate::Token;
 
+    macro_rules! semicolon_token {
+        ($line: expr) => {
+            Token::new(TokenType::Semicolon, String::from(";"), $line)
+        };
+    }
+
     #[test]
     fn single_line_string_literal() {
         let source = "a = \"Hello World\"";
-        let mut scanner = super::Scanner::new(source);
-        let result = scanner.scan_tokens().unwrap();
+        let scanner = super::Scanner::new(source);
+        let result: Vec<Token> = scanner.map(|i| i.unwrap()).collect();
+
         assert_eq!(
             result,
             [
@@ -307,7 +337,6 @@ mod tests {
                     String::from("\"Hello World\""),
                     1
                 ),
-                Token::new(TokenType::Eof, String::from(""), 1),
             ]
         )
     }
@@ -315,8 +344,8 @@ mod tests {
     #[test]
     fn multi_line_string_literal() {
         let source = "a = \"hello\ncrayon\nlets go\"";
-        let mut scanner = super::Scanner::new(source);
-        let result = scanner.scan_tokens().unwrap();
+        let scanner = super::Scanner::new(source);
+        let result: Vec<Token> = scanner.map(|i| i.unwrap()).collect();
         assert_eq!(
             result,
             [
@@ -331,7 +360,6 @@ mod tests {
                     String::from("\"hello\ncrayon\nlets go\""),
                     3
                 ),
-                Token::new(TokenType::Eof, String::from(""), 3),
             ]
         )
     }
@@ -339,8 +367,8 @@ mod tests {
     #[test]
     fn test_multibyte_tokens() {
         let source = "== >= <= !=";
-        let mut scanner = super::Scanner::new(source);
-        let result = scanner.scan_tokens().unwrap();
+        let scanner = super::Scanner::new(source);
+        let result: Vec<Token> = scanner.map(|i| i.unwrap()).collect();
         assert_eq!(
             result,
             [
@@ -348,8 +376,80 @@ mod tests {
                 Token::new(TokenType::GreaterEqual, String::from(">="), 1),
                 Token::new(TokenType::LessEqual, String::from("<="), 1),
                 Token::new(TokenType::BangEqual, String::from("!="), 1),
-                Token::new(TokenType::Eof, String::from(""), 1),
             ]
         );
+    }
+
+    #[test]
+    fn test_whitespace_skipping() {
+        let source = "     = hola";
+        let scanner = super::Scanner::new(source);
+        let result: Vec<Token> = scanner.map(|i| i.unwrap()).collect();
+
+        assert_eq!(
+            result,
+            [
+                Token::new(TokenType::Equal, String::from("="), 1,),
+                Token::new(
+                    TokenType::Identifier(String::from("hola")),
+                    String::from("hola"),
+                    1
+                ),
+            ]
+        )
+    }
+
+    #[test]
+    fn test_comment_skip() {
+        let source = r#" // C
+    print hola; // This is another comment
+    print a;"#;
+        let scanner = super::Scanner::new(source);
+        let result: Vec<Token> = scanner.map(|i| i.unwrap()).collect();
+
+        assert_eq![
+            result,
+            [
+                Token::new(TokenType::Print, String::from("print"), 2),
+                Token::new(
+                    TokenType::Identifier(String::from("hola")),
+                    String::from("hola"),
+                    2
+                ),
+                semicolon_token!(2),
+                Token::new(TokenType::Print, String::from("print"), 3),
+                Token::new(
+                    TokenType::Identifier(String::from("a")),
+                    String::from("a"),
+                    3
+                ),
+                semicolon_token!(3),
+            ]
+        ]
+    }
+
+    #[test]
+    fn division_expression() {
+        let source = "a / b;";
+        let scanner = super::Scanner::new(source);
+        let result: Vec<Token> = scanner.map(|i| i.unwrap()).collect();
+
+        assert_eq!(
+            result,
+            [
+                Token::new(
+                    TokenType::Identifier(String::from("a")),
+                    String::from("a"),
+                    1
+                ),
+                Token::new(TokenType::Slash, String::from("/"), 1),
+                Token::new(
+                    TokenType::Identifier(String::from("b")),
+                    String::from("b"),
+                    1
+                ),
+                semicolon_token!(1),
+            ]
+        )
     }
 }

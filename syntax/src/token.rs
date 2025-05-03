@@ -50,6 +50,7 @@ pub enum TokenType {
     Var,
     While,
 
+    #[deprecated]
     Eof,
 }
 
