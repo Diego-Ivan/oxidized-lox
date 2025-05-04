@@ -1,7 +1,6 @@
-mod iterator;
-
 use crate::token::*;
 use std::collections::HashMap;
+use std::io::BufRead;
 
 static DECIMAL_SEPARATOR: u8 = b'.';
 
@@ -17,13 +16,13 @@ pub enum ScannerError {
 
 pub type ScannerResult<T> = Result<T, ScannerError>;
 
-pub struct Scanner<'a> {
-    source: &'a [u8],
-    start: usize,
-    current: usize,
+pub struct Scanner<R: BufRead> {
+    reader: R,
     line: usize,
-
+    current_byte: Option<u8>,
     identifier_map: HashMap<String, TokenType>,
+
+    started: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -32,8 +31,8 @@ enum NumberParseSection {
     Decimal,
 }
 
-impl<'a> Scanner<'a> {
-    pub fn new(source: &'a str) -> Self {
+impl<R: BufRead> Scanner<R> {
+    pub fn new(reader: R) -> Self {
         let mut identifier_map = HashMap::new();
         macro_rules! insert_token {
             ($str: expr, $tkn: ident) => {
@@ -61,191 +60,128 @@ impl<'a> Scanner<'a> {
         insert_token!("while", While);
 
         Scanner {
-            source: source.as_bytes(),
-            start: 0,
-            current: 0,
+            reader,
             line: 1,
+            current_byte: None,
             identifier_map,
+            started: false,
         }
     }
 
-    fn scan_token(&mut self) -> ScannerResult<Token> {
-        /* Ignorar whitespace y comentarios */
-        let current = self.skip_whitespace();
-        match current {
-            b'(' => self.add_token(TokenType::LeftParen),
-            b')' => self.add_token(TokenType::RightParen),
-            b'{' => self.add_token(TokenType::LeftBrace),
-            b'}' => self.add_token(TokenType::RightBrace),
-            b',' => self.add_token(TokenType::Comma),
-            b'.' => self.add_token(TokenType::Dot),
-            b'-' => self.add_token(TokenType::Minus),
-            b'+' => self.add_token(TokenType::Plus),
-            b';' => self.add_token(TokenType::Semicolon),
-            b'*' => self.add_token(TokenType::Star),
-            b'!' => {
-                if self.match_character(b'=') {
-                    self.add_token(TokenType::BangEqual)
+    fn scan_token(&mut self) -> Option<ScannerResult<Token>> {
+        use TokenType::*;
+
+        let mut lexeme = Vec::new();
+
+        macro_rules! add_single_byte {
+            ($c: ident, $token_type: ident) => {{
+                lexeme.push($c);
+                self.add_token($token_type, lexeme)
+            }};
+        }
+
+        macro_rules! add_multiple_if_match {
+            ($current: expr, $c: expr, $if_match: ident, $else_match: ident) => {{
+                lexeme.push($current);
+                if self.match_character($c) {
+                    lexeme.push($c);
+                    self.add_token($if_match, lexeme)
                 } else {
-                    self.add_token(TokenType::Bang)
+                    self.add_token($else_match, lexeme)
                 }
-            }
-            b'=' => {
-                if self.match_character(b'=') {
-                    self.add_token(TokenType::EqualEqual)
-                } else {
-                    self.add_token(TokenType::Equal)
-                }
-            }
-            b'<' => {
-                if self.match_character(b'=') {
-                    self.add_token(TokenType::LessEqual)
-                } else {
-                    self.add_token(TokenType::Less)
-                }
-            }
-            b'>' => {
-                if self.match_character(b'=') {
-                    self.add_token(TokenType::GreaterEqual)
-                } else {
-                    self.add_token(TokenType::Greater)
-                }
-            }
-            b'/' => self.add_token(TokenType::Slash),
-
-            b'"' => self.consume_string(),
-            // An identifier can start with an alphabetic character or with an underscore.
-            b'A'..=b'Z' | b'a'..=b'z' | b'_' => self.consume_identifier(),
-            b'0'..=b'9' => self.consume_number(),
-            any => Err(ScannerError::UnexpectedCharacter(any)),
+            }};
         }
+
+        let current = self.consume_whitespace()?;
+        let token = match current {
+            b'(' => add_single_byte!(current, LeftParen),
+            b')' => add_single_byte!(current, RightParen),
+            b'{' => add_single_byte!(current, LeftBrace),
+            b'}' => add_single_byte!(current, RightBrace),
+            b',' => add_single_byte!(current, Comma),
+            b'.' => add_single_byte!(current, Dot),
+            b'-' => add_single_byte!(current, Minus),
+            b'+' => add_single_byte!(current, Plus),
+            b';' => add_single_byte!(current, Semicolon),
+            b'*' => add_single_byte!(current, Star),
+            b'!' => add_multiple_if_match!(current, b'=', BangEqual, Bang),
+            b'=' => add_multiple_if_match!(current, b'=', EqualEqual, Equal),
+            b'<' => add_multiple_if_match!(current, b'=', LessEqual, Less),
+            b'>' => add_multiple_if_match!(current, b'=', GreaterEqual, Greater),
+            b'/' => add_single_byte!(current, Slash),
+            b'"' => {
+                lexeme.push(current);
+                self.consume_string(lexeme)
+            }
+            b'0'..=b'9' => {
+                lexeme.push(current);
+                self.consume_number(lexeme)
+            }
+            b'A'..=b'Z' | b'a'..=b'z' | b'_' => {
+                lexeme.push(current);
+                self.consume_identifier(lexeme)
+            }
+            a => Err(ScannerError::UnexpectedCharacter(a)),
+        };
+        Some(token)
     }
 
-    fn skip_whitespace(&mut self) -> u8 {
-        loop {
-            let current = self.advance();
-            match current {
-                b' ' | b'\t' => {
-                    self.start += 1;
-                }
-                b'\n' | b'\r' => {
-                    self.start += 1;
-                    self.line += 1;
-                }
-                // consumir comentarios e ignorarlos
-                b'/' => {
-                    if self.match_character(b'/') {
-                        self.start += 2;
-                        while let Some(c) = self.peek() {
-                            if c == b'\n' {
-                                break;
-                            }
-                            self.start += 1;
-                            self.advance();
-                        }
-                    } else {
-                        break current;
-                    }
-                }
-                _ => break current,
-            }
-        }
-    }
-
-    fn peek(&self) -> Option<u8> {
-        self.source.get(self.current).copied()
-    }
-
-    fn match_character(&mut self, character: u8) -> bool {
-        if self.is_at_end() {
-            return false;
-        }
-        if self.source[self.current] != character {
-            return false;
-        }
-        self.current += 1;
-        true
-    }
-
-    fn advance(&mut self) -> u8 {
-        match self.source.get(self.current) {
-            Some(byte) => {
-                self.current += 1;
-                *byte
-            }
-            None => 0,
-        }
-    }
-
-    fn add_token(&mut self, token_type: TokenType) -> ScannerResult<Token> {
-        let lexeme = Vec::from(&self.source[self.start..self.current]);
+    fn add_token(&mut self, token_type: TokenType, lexeme: Vec<u8>) -> ScannerResult<Token> {
         let lexeme = match String::from_utf8(lexeme) {
-            Ok(lexeme) => lexeme,
+            Ok(s) => s,
             Err(_) => return Err(ScannerError::NotUtf8(self.line)),
         };
-        let token = Token::new(token_type, lexeme, self.line);
-        Ok(token)
+
+        Ok(Token::new(token_type, lexeme, self.line))
     }
 
-    #[deprecated(note = "Use iterator API instead")]
-    pub fn scan_tokens(&mut self) -> ScannerResult<Vec<Token>> {
-        let mut tokens = Vec::new();
-        while !self.is_at_end() {
-            self.start = self.current;
-            tokens.push(self.scan_token()?);
-        }
-
-        tokens.push(Token::new(TokenType::Eof, String::new(), self.line));
-
-        Ok(tokens)
-    }
-
-    fn is_at_end(&self) -> bool {
-        self.current >= self.source.len()
-    }
-
-    fn consume_string(&mut self) -> ScannerResult<Token> {
+    fn consume_string(&mut self, mut lexeme: Vec<u8>) -> ScannerResult<Token> {
         let mut completed = false;
-        while let Some(c) = self.peek() {
+        while let Some(c) = self.current_byte {
             match c {
                 b'\n' => {
                     self.line += 1;
+                    lexeme.push(c);
                     self.advance();
                 }
                 b'"' => {
                     completed = true;
+                    lexeme.push(c);
                     break;
                 }
-                _ => _ = self.advance(),
+                _ => {
+                    lexeme.push(c);
+                    self.advance();
+                }
             }
         }
 
         self.advance();
 
-        if self.is_at_end() && !completed {
-            println!("{:?}", self.peek());
+        if self.current_byte.is_none() && !completed {
             return Err(ScannerError::UnterminatedStringLiteral);
         }
 
-        let string = &self.source[self.start + 1..self.current - 1];
+        let string = &lexeme[1..lexeme.len() - 1];
         let string = crate::utf8::convert_byte_slice_into_utf8(string);
 
-        self.add_token(TokenType::String(string))
+        self.add_token(TokenType::String(string), lexeme)
     }
 
-    fn consume_number(&mut self) -> ScannerResult<Token> {
+    fn consume_number(&mut self, mut lexeme: Vec<u8>) -> ScannerResult<Token> {
         // Parse the first digit.
-        let mut decimal: f64 = (self.source[self.start] - 0x30) as f64;
+        let mut decimal: f64 = (lexeme[0] - 0x30) as f64;
         let mut decimal_power = 0;
         let mut current_part = NumberParseSection::Integer;
 
-        while let Some(c) = self.peek() {
+        while let Some(c) = self.current_byte {
             if c == DECIMAL_SEPARATOR {
                 if current_part == NumberParseSection::Decimal {
                     break;
                 }
                 current_part = NumberParseSection::Decimal;
                 self.advance();
+                lexeme.push(c);
                 continue;
             }
 
@@ -254,6 +190,7 @@ impl<'a> Scanner<'a> {
             }
 
             let current_value = (c - 0x30) as f64;
+            lexeme.push(c);
 
             match current_part {
                 NumberParseSection::Integer => {
@@ -268,48 +205,122 @@ impl<'a> Scanner<'a> {
             self.advance();
         }
 
-        self.add_token(TokenType::Number(decimal))
+        self.add_token(TokenType::Number(decimal), lexeme)
     }
 
-    fn consume_identifier(&mut self) -> ScannerResult<Token> {
-        while let Some(c) = self.peek() {
+    fn consume_identifier(&mut self, mut lexeme: Vec<u8>) -> ScannerResult<Token> {
+        while let Some(c) = self.current_byte {
             if !c.is_ascii_alphanumeric() && c != b'_' {
                 break;
             }
+            lexeme.push(c);
             self.advance();
         }
 
-        let identifier = &self.source[self.start..self.current];
-        let identifier = crate::utf8::convert_byte_slice_into_utf8(identifier);
+        let identifier = crate::utf8::convert_byte_slice_into_utf8(&lexeme);
 
-        let token = match self.identifier_map.get(&identifier) {
-            Some(token) => token.clone(),
+        let token_type = match self.identifier_map.get(&identifier) {
+            Some(token_type) => token_type.clone(),
             None => TokenType::Identifier(identifier),
         };
 
-        self.add_token(token)
+        self.add_token(token_type, lexeme)
+    }
+
+    fn consume_whitespace(&mut self) -> Option<u8> {
+        loop {
+            let current = self.advance()?;
+            match current {
+                b'\n' | b'\r' => {
+                    self.line += 1;
+                }
+                b' ' | b'\t' => {}
+                // Consume comments, if they are there.
+                b'/' => {
+                    if !self.match_character(b'/') {
+                        break Some(current);
+                    }
+                    while let Some(current) = self.current_byte {
+                        if current == b'\n' {
+                            break;
+                        }
+                        self.advance();
+                    }
+                }
+
+                _ => break Some(current),
+            }
+        }
+    }
+
+    fn match_character(&mut self, other: u8) -> bool {
+        let current = match self.current_byte {
+            Some(current) => current,
+            None => return false,
+        };
+
+        if current == other {
+            self.advance();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn advance(&mut self) -> Option<u8> {
+        let mut buf = [0u8; 1];
+        match self.reader.read_exact(&mut buf) {
+            Ok(_) => {
+                let current_byte = self.current_byte.take();
+
+                self.current_byte = Some(buf[0]);
+                // This will only happen on the last byte
+                current_byte
+            }
+            /*
+             * If we have finished reading from the Reader, it is still also possible that
+             * we have one single byte remaining on the scanner, which would be the current byte
+             */
+            Err(_) => self.current_byte.take(),
+        }
+    }
+    pub fn scan_tokens(self) -> ScannerResult<Vec<Token>> {
+        let mut tokens = Vec::new();
+        for token in self.into_iter() {
+            tokens.push(token?);
+        }
+        Ok(tokens)
     }
 }
 
-impl Iterator for Scanner<'_> {
+impl<R: BufRead> Iterator for Scanner<R> {
     type Item = ScannerResult<Token>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.is_at_end() {
-            None
-        } else {
-            self.start = self.current;
-            Some(self.scan_token())
+        /*
+         * If we have not started reading from the reader, then we need to start parsing
+         * the first character.
+         */
+        if !self.started {
+            let mut buf = [0u8; 1];
+            match self.reader.read_exact(&mut buf) {
+                Ok(_) => self.current_byte = Some(buf[0]),
+                Err(_) => return None,
+            }
+
+            self.started = true;
         }
+        self.scan_token()
     }
 }
 
-impl std::iter::FusedIterator for Scanner<'_> {}
+impl<R: BufRead> std::iter::FusedIterator for Scanner<R> {}
 
 #[cfg(test)]
 mod tests {
     use crate::token::TokenType;
     use crate::Token;
+    use std::io::Cursor;
 
     macro_rules! semicolon_token {
         ($line: expr) => {
@@ -317,20 +328,48 @@ mod tests {
         };
     }
 
+    macro_rules! identifier {
+        ($lexeme: expr, $line: expr) => {{
+            Token::new(
+                TokenType::Identifier(String::from($lexeme)),
+                String::from($lexeme),
+                $line,
+            )
+        }};
+    }
+
+    #[test]
+    fn single_byte_tokens() {
+        let source = "   =/+-    (){}   ;   // this is a comment that should be ignored.\n = +";
+        let scanner = super::Scanner::new(Cursor::new(source));
+        let result = scanner.scan_tokens().unwrap();
+        assert_eq!(
+            result,
+            [
+                Token::new(TokenType::Equal, String::from("="), 1),
+                Token::new(TokenType::Slash, String::from("/"), 1),
+                Token::new(TokenType::Plus, String::from("+"), 1),
+                Token::new(TokenType::Minus, String::from("-"), 1),
+                Token::new(TokenType::LeftParen, String::from("("), 1),
+                Token::new(TokenType::RightParen, String::from(")"), 1),
+                Token::new(TokenType::LeftBrace, String::from("{"), 1),
+                Token::new(TokenType::RightBrace, String::from("}"), 1),
+                Token::new(TokenType::Semicolon, String::from(";"), 1),
+                Token::new(TokenType::Equal, String::from("="), 2),
+                Token::new(TokenType::Plus, String::from("+"), 2),
+            ]
+        )
+    }
+
     #[test]
     fn single_line_string_literal() {
-        let source = "a = \"Hello World\"";
-        let scanner = super::Scanner::new(source);
-        let result: Vec<Token> = scanner.map(|i| i.unwrap()).collect();
+        let source = "= \"Hello World\"";
+        let scanner = super::Scanner::new(Cursor::new(source));
+        let result: Vec<Token> = scanner.scan_tokens().unwrap();
 
         assert_eq!(
             result,
             [
-                Token::new(
-                    TokenType::Identifier(String::from("a")),
-                    String::from("a"),
-                    1
-                ),
                 Token::new(TokenType::Equal, String::from("="), 1),
                 Token::new(
                     TokenType::String(String::from("Hello World"),),
@@ -343,17 +382,12 @@ mod tests {
 
     #[test]
     fn multi_line_string_literal() {
-        let source = "a = \"hello\ncrayon\nlets go\"";
-        let scanner = super::Scanner::new(source);
+        let source = " = \"hello\ncrayon\nlets go\"";
+        let scanner = super::Scanner::new(Cursor::new(source));
         let result: Vec<Token> = scanner.map(|i| i.unwrap()).collect();
         assert_eq!(
             result,
             [
-                Token::new(
-                    TokenType::Identifier(String::from("a")),
-                    String::from("a"),
-                    1
-                ),
                 Token::new(TokenType::Equal, String::from("="), 1),
                 Token::new(
                     TokenType::String(String::from("hello\ncrayon\nlets go"),),
@@ -365,9 +399,89 @@ mod tests {
     }
 
     #[test]
+    fn test_number_parsing() {
+        let source = "    30.5    ;    ";
+        let scanner = super::Scanner::new(Cursor::new(source));
+        let result: Vec<Token> = scanner.scan_tokens().unwrap();
+
+        assert_eq!(
+            result,
+            [
+                Token::new(TokenType::Number(30.5), String::from("30.5"), 1),
+                semicolon_token!(1)
+            ]
+        )
+    }
+
+    #[test]
+    fn test_identifiers() {
+        let source = "print\nfoo\nand or bar // sample\nbreak\nfun\nsuper\ncontinue return while";
+        let scanner = super::Scanner::new(Cursor::new(source));
+        let result = scanner.scan_tokens().unwrap();
+
+        assert_eq!(
+            result,
+            [
+                Token::new(TokenType::Print, String::from("print"), 1),
+                Token::new(
+                    TokenType::Identifier(String::from("foo")),
+                    String::from("foo"),
+                    2
+                ),
+                Token::new(TokenType::And, String::from("and"), 3),
+                Token::new(TokenType::Or, String::from("or"), 3),
+                Token::new(
+                    TokenType::Identifier(String::from("bar")),
+                    String::from("bar"),
+                    3
+                ),
+                Token::new(TokenType::Break, String::from("break"), 4),
+                Token::new(TokenType::Fun, String::from("fun"), 5),
+                Token::new(TokenType::Super, String::from("super"), 6),
+                Token::new(TokenType::Continue, String::from("continue"), 7),
+                Token::new(TokenType::Return, String::from("return"), 7),
+                Token::new(TokenType::While, String::from("while"), 7),
+            ]
+        )
+    }
+
+    #[test]
+    fn test_combined_identifiers() {
+        let source = "andor\nwhiletrue\nfalsebreak\n oror";
+        let scanner = super::Scanner::new(Cursor::new(source));
+        let result = scanner.scan_tokens().unwrap();
+
+        assert_eq!(
+            result,
+            [
+                Token::new(
+                    TokenType::Identifier(String::from("andor")),
+                    String::from("andor"),
+                    1
+                ),
+                Token::new(
+                    TokenType::Identifier(String::from("whiletrue")),
+                    String::from("whiletrue"),
+                    2
+                ),
+                Token::new(
+                    TokenType::Identifier(String::from("falsebreak")),
+                    String::from("falsebreak"),
+                    3
+                ),
+                Token::new(
+                    TokenType::Identifier(String::from("oror")),
+                    String::from("oror"),
+                    4
+                ),
+            ]
+        )
+    }
+
+    #[test]
     fn test_multibyte_tokens() {
         let source = "== >= <= !=";
-        let scanner = super::Scanner::new(source);
+        let scanner = super::Scanner::new(Cursor::new(source));
         let result: Vec<Token> = scanner.map(|i| i.unwrap()).collect();
         assert_eq!(
             result,
@@ -383,7 +497,7 @@ mod tests {
     #[test]
     fn test_whitespace_skipping() {
         let source = "     = hola";
-        let scanner = super::Scanner::new(source);
+        let scanner = super::Scanner::new(Cursor::new(source));
         let result: Vec<Token> = scanner.map(|i| i.unwrap()).collect();
 
         assert_eq!(
@@ -404,7 +518,7 @@ mod tests {
         let source = r#" // C
     print hola; // This is another comment
     print a;"#;
-        let scanner = super::Scanner::new(source);
+        let scanner = super::Scanner::new(Cursor::new(source));
         let result: Vec<Token> = scanner.map(|i| i.unwrap()).collect();
 
         assert_eq![
@@ -431,7 +545,7 @@ mod tests {
     #[test]
     fn division_expression() {
         let source = "a / b;";
-        let scanner = super::Scanner::new(source);
+        let scanner = super::Scanner::new(Cursor::new(source));
         let result: Vec<Token> = scanner.map(|i| i.unwrap()).collect();
 
         assert_eq!(
@@ -449,6 +563,39 @@ mod tests {
                     1
                 ),
                 semicolon_token!(1),
+            ]
+        )
+    }
+
+    #[test]
+    fn function_declaration_syntax() {
+        let source = r#"fun function_example(param1) {
+            print param1;
+            return "param1";
+        }"#;
+        let scanner = super::Scanner::new(Cursor::new(source));
+        let result = scanner.scan_tokens().unwrap();
+
+        assert_eq!(
+            result,
+            [
+                Token::new(TokenType::Fun, String::from("fun"), 1),
+                identifier!("function_example", 1),
+                Token::new(TokenType::LeftParen, String::from("("), 1),
+                identifier!("param1", 1),
+                Token::new(TokenType::RightParen, String::from(")"), 1),
+                Token::new(TokenType::LeftBrace, String::from("{"), 1),
+                Token::new(TokenType::Print, String::from("print"), 2),
+                identifier!("param1", 2),
+                semicolon_token!(2),
+                Token::new(TokenType::Return, String::from("return"), 3),
+                Token::new(
+                    TokenType::String(String::from("param1")),
+                    String::from("\"param1\""),
+                    3
+                ),
+                semicolon_token!(3),
+                Token::new(TokenType::RightBrace, String::from("}"), 4),
             ]
         )
     }
