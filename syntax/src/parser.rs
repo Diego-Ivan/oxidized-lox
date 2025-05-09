@@ -579,7 +579,7 @@ impl<'a> Parser<'a> {
         }
     }
     fn is_at_end(&self) -> bool {
-        matches!(self.tokens[self.current].token_type(), TokenType::Eof)
+        self.current >= self.tokens.len()
     }
 
     fn peek(&self) -> Option<&Token> {

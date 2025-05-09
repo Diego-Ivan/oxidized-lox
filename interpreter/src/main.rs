@@ -1,7 +1,7 @@
 mod interpreter;
 
 use crate::interpreter::{Interpreter, InterpreterError};
-use std::io::{Read, Result as IOResult};
+use std::io::{Cursor, Read, Result as IOResult};
 use std::path::Path;
 use std::process::ExitCode;
 use std::sync::Mutex;
@@ -31,10 +31,17 @@ fn main() -> ExitCode {
 }
 
 fn run(source: &str, interpreter: &Interpreter) {
-    let mut scanner = syntax::Scanner::new(source);
-    let tokens = scanner.scan_tokens();
+    let scanner = syntax::Scanner::new(Cursor::new(source));
 
-    let mut parser = syntax::Parser::new(tokens);
+    let tokens = match scanner.scan_tokens() {
+        Ok(tokens) => tokens,
+        Err(e) => {
+            eprintln!("Syntax Error: {e}");
+            return;
+        }
+    };
+
+    let mut parser = syntax::Parser::new(&tokens);
     let statements = match parser.statements() {
         Ok(stmts) => stmts,
         Err(e) => {

@@ -9,10 +9,10 @@ use crate::interpreter::environment::Environment;
 pub use error::*;
 use std::cell::RefCell;
 use std::rc::Rc;
+use syntax::Expression;
 use syntax::statement::Block;
 pub use syntax::statement::Statement;
 use syntax::token::{Token, TokenType};
-use syntax::Expression;
 pub use value::LoxValue;
 
 type RcEnvironment = Rc<RefCell<Environment>>;
@@ -32,7 +32,8 @@ pub enum ControlFlow {
 
 impl Interpreter {
     pub fn new() -> Self {
-        let globals = Rc::new(RefCell::new(Environment::new()));
+        let ref_cell = Rc::new(RefCell::new(Environment::new()));
+        let globals = ref_cell;
         let interpreter = Self {
             environment_stack: RefCell::new(vec![globals.clone()]),
             globals,

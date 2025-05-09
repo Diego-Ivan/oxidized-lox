@@ -8,6 +8,7 @@ mod utf8;
 pub use expression::Expression;
 pub use parser::Parser;
 pub use scanner::Scanner;
+pub use scanner::{ScannerError, ScannerResult};
 pub use statement::Statement;
 pub use token::Token;
 
