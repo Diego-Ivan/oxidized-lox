@@ -28,7 +28,7 @@ pub enum TokenType {
     /* Literals */
     Identifier(String),
     String(String),
-    Number(f64),
+    Number(ordered_float::OrderedFloat<f64>),
 
     // Keywords
     And,

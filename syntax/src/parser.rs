@@ -1,6 +1,7 @@
 use crate::expression::Expression;
 use crate::statement::{Block, Statement};
 use crate::token::{Token, TokenType};
+use ordered_float::OrderedFloat;
 use thiserror::Error;
 
 const MAX_ARGS: usize = 255;
@@ -532,7 +533,7 @@ impl<'a> Parser<'a> {
                 Ok(Expression::Nil)
             }
             TokenType::Number(num) => {
-                let expr = Expression::Number(*num);
+                let expr = Expression::Number(OrderedFloat(**num));
                 self.advance();
                 Ok(expr)
             }

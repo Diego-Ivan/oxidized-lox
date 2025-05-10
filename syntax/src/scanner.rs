@@ -205,7 +205,10 @@ impl<R: BufRead> Scanner<R> {
             self.advance();
         }
 
-        self.add_token(TokenType::Number(decimal), lexeme)
+        self.add_token(
+            TokenType::Number(ordered_float::OrderedFloat(decimal)),
+            lexeme,
+        )
     }
 
     fn consume_identifier(&mut self, mut lexeme: Vec<u8>) -> ScannerResult<Token> {
@@ -318,8 +321,8 @@ impl<R: BufRead> std::iter::FusedIterator for Scanner<R> {}
 
 #[cfg(test)]
 mod tests {
-    use crate::token::TokenType;
     use crate::Token;
+    use crate::token::TokenType;
     use std::io::Cursor;
 
     macro_rules! semicolon_token {
@@ -407,7 +410,11 @@ mod tests {
         assert_eq!(
             result,
             [
-                Token::new(TokenType::Number(30.5), String::from("30.5"), 1),
+                Token::new(
+                    TokenType::Number(ordered_float::OrderedFloat(30.5)),
+                    String::from("30.5"),
+                    1
+                ),
                 semicolon_token!(1)
             ]
         )

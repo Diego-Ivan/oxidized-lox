@@ -4,3 +4,4 @@ members = ["interpreter", "syntax"]
 
 [workspace.dependencies]
 thiserror = "2.0.12"
+ordered-float = "5.0.0"

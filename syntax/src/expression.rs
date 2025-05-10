@@ -36,7 +36,7 @@ pub enum Expression {
     // Literals
     True,
     False,
-    Number(f64),
+    Number(ordered_float::OrderedFloat<f64>),
     String(String),
     Nil,
 }
