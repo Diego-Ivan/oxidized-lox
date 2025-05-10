@@ -1,0 +1,197 @@
+use crate::interpreter::Interpreter;
+use std::collections::HashMap;
+use syntax::{Expression, Statement};
+
+#[derive(thiserror::Error, Debug)]
+pub enum ResolverError {
+    #[error("Variable cannot be read before it is initialized")]
+    NotInitialized,
+}
+
+pub struct Resolver<'i> {
+    interpreter: &'i Interpreter,
+    scopes: Vec<HashMap<String, bool>>,
+}
+
+impl<'i> Resolver<'i> {
+    pub fn new(interpreter: &'i Interpreter) -> Self {
+        Self {
+            interpreter,
+            scopes: Vec::new(),
+        }
+    }
+
+    fn begin_scope(&mut self) {
+        self.scopes.push(HashMap::new());
+    }
+
+    fn end_scope(&mut self) {
+        self.scopes.pop();
+    }
+
+    pub fn resolve_statements(&mut self, statements: &[Statement]) {
+        for statement in statements {
+            self.resolve_statement(statement);
+        }
+    }
+
+    fn resolve_statement(&mut self, statement: &Statement) -> Result<(), ResolverError> {
+        match statement {
+            Statement::Block(block) => {
+                self.begin_scope();
+                self.resolve_statements(block);
+                self.end_scope();
+                Ok(())
+            }
+
+            Statement::VariableDeclaration { name, initializer } => {
+                self.declare_variable(name);
+
+                if let Some(initializer) = initializer {
+                    self.resolve_expression(initializer)?;
+                }
+
+                self.define(name);
+                Ok(())
+            }
+            Statement::Expression(expression) => self.resolve_expression(expression),
+            Statement::Print(expression) => self.resolve_expression(expression),
+            Statement::FunctionDeclaration {
+                name,
+                parameters,
+                body,
+            } => {
+                self.declare_variable(name);
+                self.define(name);
+
+                self.resolve_function(name, parameters, body);
+                Ok(())
+            }
+            Statement::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                self.resolve_expression(condition)?;
+                self.resolve_statement(then_branch)?;
+
+                if let Some(else_branch) = else_branch {
+                    self.resolve_statement(else_branch)?;
+                }
+
+                Ok(())
+            }
+            Statement::While { condition, body } => self
+                .resolve_expression(condition)
+                .and(self.resolve_statement(body)),
+            Statement::For {
+                initializer,
+                condition,
+                increment,
+                body,
+            } => todo!(),
+            Statement::Return {
+                keyword,
+                expression,
+            } => {
+                if let Some(expression) = expression {
+                    self.resolve_expression(expression)?;
+                }
+
+                Ok(())
+            }
+            Statement::Break { keyword } => Ok(()),
+            Statement::Continue { keyword } => Ok(()),
+        }
+    }
+
+    fn resolve_expression(&mut self, expr: &Expression) -> Result<(), ResolverError> {
+        match expr {
+            Expression::Var { name, token: _ } => {
+                let scope = match self.scopes.last() {
+                    Some(scope) => scope,
+                    None => return Err(ResolverError::NotInitialized),
+                };
+
+                if !matches!(scope.get(name), Some(true)) {
+                    return Err(ResolverError::NotInitialized);
+                }
+
+                Ok(())
+            }
+            Expression::Binary { left, right, .. } => self
+                .resolve_expression(left)
+                .and(self.resolve_expression(right)),
+            Expression::Grouping(expression) => self.resolve_expression(expression),
+            Expression::Unary(_, expression) => self.resolve_expression(expression),
+            Expression::Assignment {
+                name,
+                value,
+                token: _,
+            } => {
+                self.resolve_expression(value)?;
+                self.resolve_local(expr, name);
+
+                Ok(())
+            }
+            // Logical Expressions
+            Expression::Or { left, right } | Expression::And { left, right } => self
+                .resolve_expression(left)
+                .and(self.resolve_expression(right)),
+            Expression::Call { callee, args, .. } => {
+                self.resolve_expression(callee)?;
+
+                for arg in args {
+                    self.resolve_expression(arg)?;
+                }
+
+                Ok(())
+            }
+            Expression::True
+            | Expression::False
+            | Expression::Number(_)
+            | Expression::String(_)
+            | Expression::Nil => Ok(()),
+        }
+    }
+
+    fn resolve_function(&mut self, name: &str, parameters: &[syntax::Token], body: &[Statement]) {
+        self.begin_scope();
+
+        for param in parameters {
+            self.declare_variable(param.lexeme());
+            self.define(param.lexeme());
+        }
+
+        self.resolve_statements(body);
+
+        self.end_scope();
+    }
+
+    fn resolve_local(&self, expr: &Expression, name: &str) {
+        for (idx, scope) in self.scopes.iter().rev().enumerate() {
+            if scope.contains_key(name) {
+                self.interpreter.resolve(self.scopes.len() - 1 - idx);
+                return;
+            }
+        }
+    }
+
+    fn define(&mut self, name: &str) {
+        let scope = match self.scopes.last_mut() {
+            Some(scope) => scope,
+            None => return,
+        };
+
+        scope.insert(String::from(name), true);
+    }
+
+    fn declare_variable(&mut self, name: &str) {
+        let scope = match self.scopes.last_mut() {
+            Some(scope) => scope,
+            None => return,
+        };
+
+        scope.insert(String::from(name), false);
+    }
+}

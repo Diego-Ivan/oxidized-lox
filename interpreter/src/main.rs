@@ -1,4 +1,5 @@
 mod interpreter;
+mod resolver;
 
 use crate::interpreter::{Interpreter, InterpreterError};
 use std::io::{Cursor, Read, Result as IOResult};
