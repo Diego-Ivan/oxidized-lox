@@ -1,7 +1,7 @@
 use crate::token::Token;
 use std::fmt::{Debug, Formatter, Write};
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Expression {
     Binary {
         left: Box<Expression>,
