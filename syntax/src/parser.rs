@@ -362,14 +362,18 @@ impl<'a> Parser<'a> {
             let equals = self.previous().unwrap().clone();
             let value_expr = self.assignment()?;
 
-            if let Expression::Var { name, token: _ } = &expr {
-                Ok(Expression::Assignment {
-                    name: name.to_string(),
-                    token: equals,
+            match expr {
+                Expression::Var { name, token: _ } => Ok(Expression::Assignment {
+                    name,
                     value: Box::new(value_expr),
-                })
-            } else {
-                Err(ParserError::InvalidAssignmentTarget(value_expr))
+                    token: equals.clone(),
+                }),
+                Expression::Get { token, expression } => Ok(Expression::Assignment {
+                    name: token.lexeme().to_string(),
+                    value: expression,
+                    token: equals.clone(),
+                }),
+                _ => Err(ParserError::InvalidAssignmentTarget(value_expr)),
             }
         } else {
             Ok(expr)

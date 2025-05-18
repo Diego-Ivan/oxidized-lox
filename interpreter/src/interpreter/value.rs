@@ -1,4 +1,5 @@
 use crate::interpreter::callable::Callable;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
@@ -21,7 +22,7 @@ pub struct Class {
 #[derive(Debug, Clone)]
 pub struct Instance {
     class: Rc<Class>,
-    fields: HashMap<String, LoxValue>,
+    fields: RefCell<HashMap<String, LoxValue>>,
 }
 
 impl LoxValue {
@@ -67,12 +68,16 @@ impl Instance {
     pub fn new(class: Rc<Class>) -> Self {
         Self {
             class,
-            fields: HashMap::new(),
+            fields: RefCell::new(HashMap::new()),
         }
     }
 
     pub fn get(&self, key: &str) -> Option<LoxValue> {
-        self.fields.get(key).cloned()
+        self.fields.borrow().get(key).cloned()
+    }
+
+    pub fn set(&self, key: &str, value: LoxValue) {
+        self.fields.borrow_mut().insert(key.to_string(), value);
     }
 
     pub fn class_name(&self) -> &str {

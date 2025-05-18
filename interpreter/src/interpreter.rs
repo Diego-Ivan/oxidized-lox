@@ -374,6 +374,23 @@ impl Interpreter {
                     }
                 }
             }
+            Expression::Set {
+                name,
+                object,
+                value,
+            } => {
+                if let LoxValue::Instance(instance) = self.evaluate(object)? {
+                    let value = self.evaluate(value)?;
+                    instance.set(name.lexeme(), value.clone());
+                    Ok(value)
+                } else {
+                    // TODO: This should have better formatting
+                    interpreter_error!(
+                        InterpreterErrorType::InvalidInstance(format!("{object:?}")),
+                        name.clone()
+                    )
+                }
+            }
         }
     }
 

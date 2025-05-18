@@ -36,6 +36,11 @@ pub enum Expression {
         expression: Box<Expression>,
         token: Token,
     },
+    Set {
+        name: Token,
+        object: Box<Expression>,
+        value: Box<Expression>,
+    },
 
     // Literals
     True,
@@ -98,6 +103,13 @@ impl Debug for Expression {
             }
             Expression::Get { expression, token } => {
                 write!(f, "get(expr: {expression:?}, name: {})", token.lexeme())
+            }
+            Expression::Set {
+                name,
+                object,
+                value,
+            } => {
+                write!(f, "set(name: {name}, object: {object:?}, value: {value:?})")
             }
         }
     }
