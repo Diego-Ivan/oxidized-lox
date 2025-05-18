@@ -35,6 +35,10 @@ pub enum Statement {
         increment: Option<Expression>,
         body: Box<Statement>,
     },
+    ClassDeclaration {
+        name: String,
+        methods: Vec<Function>,
+    },
     Return {
         keyword: Token,
         expression: Option<Expression>,

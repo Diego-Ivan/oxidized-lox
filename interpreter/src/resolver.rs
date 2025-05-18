@@ -58,7 +58,7 @@ impl<'i> Resolver<'i> {
             }
 
             Statement::VariableDeclaration { name, initializer } => {
-                self.declare_variable(name)?;
+                self.declare(name)?;
 
                 if let Some(initializer) = initializer {
                     self.resolve_expression(initializer)?;
@@ -67,10 +67,15 @@ impl<'i> Resolver<'i> {
                 self.define(name);
                 Ok(())
             }
+            Statement::ClassDeclaration { name, .. } => {
+                self.declare(name)?;
+                self.define(name);
+                Ok(())
+            }
             Statement::Expression(expression) => self.resolve_expression(expression),
             Statement::Print(expression) => self.resolve_expression(expression),
             Statement::FunctionDeclaration(function) => {
-                self.declare_variable(&function.name)?;
+                self.declare(&function.name)?;
                 self.define(&function.name);
 
                 self.resolve_function(&function.parameters, &function.body)
@@ -170,7 +175,7 @@ impl<'i> Resolver<'i> {
         self.begin_scope();
 
         for param in parameters {
-            self.declare_variable(param.lexeme())?;
+            self.declare(param.lexeme())?;
             self.define(param.lexeme());
         }
 
@@ -200,7 +205,7 @@ impl<'i> Resolver<'i> {
         scope.insert(String::from(name), true);
     }
 
-    fn declare_variable(&mut self, name: &str) -> Result<(), ResolverError> {
+    fn declare(&mut self, name: &str) -> Result<(), ResolverError> {
         let scope = match self.scopes.last_mut() {
             Some(scope) => scope,
             None => return Ok(()),

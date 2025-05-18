@@ -165,6 +165,20 @@ impl Interpreter {
 
                 Ok(ControlFlow::Normal)
             }
+            Statement::ClassDeclaration { name, methods: _ } => {
+                let environment = {
+                    let env_stack = self.environment_stack.borrow_mut();
+                    env_stack.last().unwrap().clone()
+                };
+
+                let mut environment = environment.borrow_mut();
+                environment.define(name.to_string(), LoxValue::Nil);
+
+                let class = value::Class::new(name.to_string());
+                environment.assign_at(name, LoxValue::Class(Rc::new(class)), 0);
+
+                Ok(ControlFlow::Normal)
+            }
             Statement::FunctionDeclaration(function) => {
                 let env_stack = self.environment_stack.borrow();
                 let current_env = env_stack.last().unwrap();

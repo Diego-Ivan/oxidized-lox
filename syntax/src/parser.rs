@@ -104,7 +104,29 @@ impl<'a> Parser<'a> {
     }
 
     fn class_declaration(&mut self) -> ParserResult<Statement> {
-        todo!()
+        macro_rules! expect_identifier {
+            ($parser: ident) => {{
+                expect_token_with_param!(
+                    $parser,
+                    TokenType::Identifier(_),
+                    Identifier,
+                    String::from("undefined")
+                )
+            }};
+        }
+
+        let name = expect_identifier!(self).lexeme().to_string();
+        expect_token!(self, TokenType::LeftBrace, LeftBrace);
+
+        let mut methods = Vec::new();
+
+        while !check_token!(self, TokenType::RightBrace) {
+            methods.push(self.function_declaration()?);
+        }
+
+        expect_token!(self, TokenType::RightBrace, RightBrace);
+
+        Ok(Statement::ClassDeclaration { name, methods })
     }
 
     fn function_declaration(&mut self) -> ParserResult<statement::Function> {
