@@ -1,20 +1,12 @@
+pub mod error;
+
 use crate::token::*;
 use std::collections::HashMap;
 use std::io::BufRead;
 
 static DECIMAL_SEPARATOR: u8 = b'.';
 
-#[derive(Debug, thiserror::Error)]
-pub enum ScannerError {
-    #[error("Unterminated string literal")]
-    UnterminatedStringLiteral,
-    #[error("Unexpected character: {0}")]
-    UnexpectedCharacter(u8),
-    #[error("Failed to parse lexeme in line {0}, not an UTF-8 character")]
-    NotUtf8(usize),
-}
-
-pub type ScannerResult<T> = Result<T, ScannerError>;
+pub type ScannerResult<T> = Result<T, error::ScannerError>;
 
 pub struct Scanner<R: BufRead> {
     reader: R,
@@ -121,7 +113,10 @@ impl<R: BufRead> Scanner<R> {
                 lexeme.push(current);
                 self.consume_identifier(lexeme)
             }
-            a => Err(ScannerError::UnexpectedCharacter(a)),
+            a => Err(error::ScannerError {
+                error_type: error::ErrorType::UnknownByte(a),
+                line: self.line,
+            }),
         };
         Some(token)
     }
@@ -129,7 +124,12 @@ impl<R: BufRead> Scanner<R> {
     fn add_token(&mut self, token_type: TokenType, lexeme: Vec<u8>) -> ScannerResult<Token> {
         let lexeme = match String::from_utf8(lexeme) {
             Ok(s) => s,
-            Err(_) => return Err(ScannerError::NotUtf8(self.line)),
+            Err(_) => {
+                return Err(error::ScannerError {
+                    error_type: error::ErrorType::NotUtf8,
+                    line: self.line,
+                });
+            }
         };
 
         Ok(Token::new(token_type, lexeme, self.line))
@@ -159,7 +159,10 @@ impl<R: BufRead> Scanner<R> {
         self.advance();
 
         if self.current_byte.is_none() && !completed {
-            return Err(ScannerError::UnterminatedStringLiteral);
+            return Err(error::ScannerError {
+                error_type: error::ErrorType::UnterminatedStringLiteral,
+                line: self.line,
+            });
         }
 
         let string = &lexeme[1..lexeme.len() - 1];
