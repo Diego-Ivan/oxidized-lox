@@ -19,7 +19,7 @@ pub enum InterpreterErrorType {
     NotInLoop,
 }
 
-pub type InterpreterResult<T> = Result<T, InterpreterError>;
+pub type InterpreterResult<T> = Result<T, Box<InterpreterError>>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum NativeError {

@@ -104,7 +104,7 @@ fn static_error(error: &str) {
     println!("Resolver error: {error}");
 }
 
-fn runtime_error(error: InterpreterError) {
+fn runtime_error(error: impl AsRef<InterpreterError> + std::fmt::Display) {
     println!("{error}");
     *HAD_RUNTIME_ERROR.lock().unwrap() = true;
 }

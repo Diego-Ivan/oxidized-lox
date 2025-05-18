@@ -32,6 +32,15 @@ enum ControlFlow {
     Return(LoxValue),
 }
 
+macro_rules! interpreter_error {
+    ($type: expr, $token: expr) => {{
+        Err(Box::new(InterpreterError {
+            error_type: $type,
+            token: $token,
+        }))
+    }};
+}
+
 impl Interpreter {
     pub fn new() -> Self {
         let ref_cell = Rc::new(RefCell::new(Environment::new()));
@@ -188,10 +197,7 @@ impl Interpreter {
             Statement::Break { .. } if inside_loop => Ok(ControlFlow::BreakLoop),
             Statement::Continue { .. } if inside_loop => Ok(ControlFlow::ContinueLoop),
             Statement::Break { keyword } | Statement::Continue { keyword } => {
-                Err(InterpreterError {
-                    error_type: InterpreterErrorType::NotInLoop,
-                    token: keyword.clone(),
-                })
+                interpreter_error!(InterpreterErrorType::NotInLoop, keyword.clone())
             }
         }
     }
@@ -240,10 +246,10 @@ impl Interpreter {
                 let value = match self.lookup_variable(name, expression) {
                     Some(value) => value,
                     None => {
-                        return Err(InterpreterError {
-                            error_type: InterpreterErrorType::UndefinedVariable(name.to_string()),
-                            token: token.clone(),
-                        });
+                        return interpreter_error!(
+                            InterpreterErrorType::UndefinedVariable(name.to_string()),
+                            token.clone()
+                        );
                     }
                 };
                 Ok(value.clone())
@@ -265,10 +271,10 @@ impl Interpreter {
                     .borrow_mut()
                     .assign_at(name, value.clone(), distance)
                 {
-                    return Err(InterpreterError {
-                        token: token.clone(),
-                        error_type: InterpreterErrorType::UndefinedVariable(String::from(name)),
-                    });
+                    return interpreter_error!(
+                        InterpreterErrorType::UndefinedVariable(String::from(name)),
+                        token.clone()
+                    );
                 }
                 Ok(value)
             }
@@ -296,10 +302,10 @@ impl Interpreter {
                 let function = match self.evaluate(callee)? {
                     LoxValue::Callable(callable) => callable,
                     _ => {
-                        return Err(InterpreterError {
-                            token: paren.clone(),
-                            error_type: InterpreterErrorType::NotACallable,
-                        });
+                        return interpreter_error!(
+                            InterpreterErrorType::NotACallable,
+                            paren.clone()
+                        );
                     }
                 };
 
@@ -350,13 +356,13 @@ impl Interpreter {
         let mut function_env = Environment::new_enclosed(closure);
 
         if params.len() != arguments.len() {
-            return Err(InterpreterError {
-                error_type: InterpreterErrorType::WrongArity {
+            return interpreter_error!(
+                InterpreterErrorType::WrongArity {
                     original: params.len(),
-                    user: arguments.len(),
+                    user: arguments.len()
                 },
-                token: token.clone(),
-            });
+                token.clone()
+            );
         }
 
         for (i, arg) in arguments.into_iter().enumerate() {
@@ -381,21 +387,18 @@ impl Interpreter {
         arguments: &[LoxValue],
     ) -> InterpreterResult<LoxValue> {
         if arity != arguments.len() {
-            return Err(InterpreterError {
-                error_type: InterpreterErrorType::WrongArity {
+            return interpreter_error!(
+                InterpreterErrorType::WrongArity {
                     original: arity,
-                    user: arguments.len(),
+                    user: arguments.len()
                 },
-                token: token.clone(),
-            });
+                token.clone()
+            );
         }
 
         match func(arguments) {
             Ok(result) => Ok(result),
-            Err(e) => Err(InterpreterError {
-                token: token.clone(),
-                error_type: InterpreterErrorType::Native(e),
-            }),
+            Err(e) => interpreter_error!(InterpreterErrorType::Native(e), token.clone()),
         }
     }
 
@@ -417,10 +420,10 @@ impl Interpreter {
             (TokenType::Bang, LoxValue::Number(0.0)) => Ok(LoxValue::Boolean(true)),
             /* Any other number is truthy */
             (TokenType::Bang, LoxValue::Number(_)) => Ok(LoxValue::Boolean(false)),
-            (op, expr) => Err(InterpreterError {
-                error_type: InterpreterErrorType::WrongUnaryOperands(op.clone(), expr),
-                token: token.clone(),
-            }),
+            (op, expr) => interpreter_error!(
+                InterpreterErrorType::WrongUnaryOperands(op.clone(), expr),
+                token.clone()
+            ),
         }
     }
 
@@ -448,10 +451,7 @@ impl Interpreter {
 
             /* Handle division by zero */
             (LoxValue::Number(_), TokenType::Slash, LoxValue::Number(0f64)) => {
-                Err(InterpreterError {
-                    error_type: InterpreterErrorType::DivisionByZero,
-                    token: operator.clone(),
-                })
+                interpreter_error!(InterpreterErrorType::DivisionByZero, operator.clone())
             }
             (LoxValue::Number(a), TokenType::Slash, LoxValue::Number(b)) => {
                 Ok(LoxValue::Number(a / b))
@@ -485,10 +485,10 @@ impl Interpreter {
             }
 
             /* Any other invalid operation will be handled here. */
-            (t1, op, t2) => Err(InterpreterError {
-                token: operator.clone(),
-                error_type: InterpreterErrorType::WrongBinaryOperands(t1, op.clone(), t2),
-            }),
+            (t1, op, t2) => interpreter_error!(
+                InterpreterErrorType::WrongBinaryOperands(t1, op.clone(), t2),
+                operator.clone()
+            ),
         }
     }
 
