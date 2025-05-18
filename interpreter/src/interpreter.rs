@@ -175,7 +175,8 @@ impl Interpreter {
                 environment.define(name.to_string(), LoxValue::Nil);
 
                 let class = value::Class::new(name.to_string());
-                environment.assign_at(name, LoxValue::Class(Rc::new(class)), 0);
+                let constructor = Callable::Constructor(Rc::new(class));
+                environment.assign_at(name, LoxValue::Callable(Rc::new(constructor)), 0);
 
                 Ok(ControlFlow::Normal)
             }
@@ -335,6 +336,19 @@ impl Interpreter {
                         block,
                     } => {
                         self.evaluate_lox_function(paren, closure.clone(), params, arguments, block)
+                    }
+                    Callable::Constructor(class) => {
+                        if !arguments.is_empty() {
+                            return interpreter_error!(
+                                InterpreterErrorType::WrongArity {
+                                    original: 0,
+                                    user: arguments.len()
+                                },
+                                paren.clone()
+                            );
+                        }
+                        let instance = value::Instance::new(class.clone());
+                        Ok(LoxValue::Instance(Rc::new(instance)))
                     }
                 }
             }

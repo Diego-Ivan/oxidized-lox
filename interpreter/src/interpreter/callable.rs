@@ -20,6 +20,7 @@ pub enum Callable {
         params: Vec<Token>,
         block: Block,
     },
+    Constructor(Rc<super::value::Class>),
 }
 
 impl Debug for Callable {
@@ -27,6 +28,7 @@ impl Debug for Callable {
         match self {
             Self::Native { func: _, arity: _ } => f.write_str("<native fun>"),
             Self::LoxFunction { name, .. } => write!(f, "<fun {name}>"),
+            Self::Constructor(name) => write!(f, "<constructor {name}>"),
         }
     }
 }

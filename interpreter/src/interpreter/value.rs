@@ -9,12 +9,17 @@ pub enum LoxValue {
     Number(f64),
     String(Rc<String>),
     Callable(Rc<Callable>),
-    Class(Rc<Class>),
+    Instance(Rc<Instance>),
 }
 
 #[derive(Debug, Clone)]
 pub struct Class {
     name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct Instance {
+    class: Rc<Class>,
 }
 
 impl LoxValue {
@@ -26,7 +31,7 @@ impl LoxValue {
             Self::Number(_) => true,
             Self::String(_) => true,
             Self::Callable(_) => true,
-            Self::Class(_) => true,
+            Self::Instance(_) => true,
         }
     }
 }
@@ -38,8 +43,8 @@ impl Display for LoxValue {
             Self::Boolean(b) => write!(f, "{b}"),
             Self::Number(n) => write!(f, "{n}"),
             Self::String(str) => f.write_str(str),
-            Self::Callable(callable) => write!(f, "{callable:?}"),
-            Self::Class(class) => Display::fmt(class, f),
+            Self::Callable(callable) => Debug::fmt(callable, f),
+            Self::Instance(instance) => Display::fmt(instance, f),
         }
     }
 }
@@ -53,5 +58,17 @@ impl Class {
 impl Display for Class {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.name)
+    }
+}
+
+impl Instance {
+    pub fn new(class: Rc<Class>) -> Self {
+        Self { class }
+    }
+}
+
+impl Display for Instance {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "instanceof({})", &self.class.name)
     }
 }
