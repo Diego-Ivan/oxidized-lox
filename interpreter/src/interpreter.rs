@@ -165,23 +165,19 @@ impl Interpreter {
 
                 Ok(ControlFlow::Normal)
             }
-            Statement::FunctionDeclaration {
-                name,
-                parameters,
-                body,
-            } => {
+            Statement::FunctionDeclaration(function) => {
                 let env_stack = self.environment_stack.borrow();
                 let current_env = env_stack.last().unwrap();
 
-                let function = Callable::LoxFunction {
+                let callable = Callable::LoxFunction {
                     closure: current_env.clone(),
-                    name: name.clone(),
-                    params: parameters.clone(),
-                    block: body.clone(),
+                    name: function.name.clone(),
+                    params: function.parameters.clone(),
+                    block: function.body.clone(),
                 };
 
                 let mut global = self.globals.borrow_mut();
-                global.define(name.clone(), LoxValue::Callable(Rc::new(function)));
+                global.define(function.name.clone(), LoxValue::Callable(Rc::new(callable)));
                 Ok(ControlFlow::Normal)
             }
             Statement::Return {

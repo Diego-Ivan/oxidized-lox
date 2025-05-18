@@ -4,6 +4,13 @@ use crate::token::Token;
 pub type Block = Vec<Statement>;
 
 #[derive(Debug, Clone)]
+pub struct Function {
+    pub name: String,
+    pub parameters: Vec<Token>,
+    pub body: Block,
+}
+
+#[derive(Debug, Clone)]
 pub enum Statement {
     Expression(Expression),
     Print(Expression),
@@ -11,11 +18,7 @@ pub enum Statement {
         name: String,
         initializer: Option<Expression>,
     },
-    FunctionDeclaration {
-        name: String,
-        parameters: Vec<Token>,
-        body: Block,
-    },
+    FunctionDeclaration(Function),
     Block(Block),
     If {
         condition: Expression,

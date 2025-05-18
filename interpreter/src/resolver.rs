@@ -69,15 +69,11 @@ impl<'i> Resolver<'i> {
             }
             Statement::Expression(expression) => self.resolve_expression(expression),
             Statement::Print(expression) => self.resolve_expression(expression),
-            Statement::FunctionDeclaration {
-                name,
-                parameters,
-                body,
-            } => {
-                self.declare_variable(name)?;
-                self.define(name);
+            Statement::FunctionDeclaration(function) => {
+                self.declare_variable(&function.name)?;
+                self.define(&function.name);
 
-                self.resolve_function(parameters, body)
+                self.resolve_function(&function.parameters, &function.body)
             }
             Statement::If {
                 condition,

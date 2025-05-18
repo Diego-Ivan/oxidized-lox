@@ -1,4 +1,5 @@
 use crate::expression::Expression;
+use crate::statement;
 use crate::statement::{Block, Statement};
 use crate::token::{Token, TokenType};
 use ordered_float::OrderedFloat;
@@ -88,19 +89,25 @@ impl<'a> Parser<'a> {
 
     fn declaration(&mut self) -> ParserResult<Statement> {
         if match_token!(self, TokenType::Fun) {
-            self.function_declaration()
+            Ok(Statement::FunctionDeclaration(self.function_declaration()?))
         } else if match_token!(self, TokenType::Var) {
             /* Synchronize if parsing a variable declaration failed */
             self.variable_declaration().inspect_err(|e| {
                 eprintln!("{e}");
                 self.synchronize();
             })
+        } else if match_token!(self, TokenType::Class) {
+            self.class_declaration()
         } else {
             self.parse_statement()
         }
     }
 
-    fn function_declaration(&mut self) -> ParserResult<Statement> {
+    fn class_declaration(&mut self) -> ParserResult<Statement> {
+        todo!()
+    }
+
+    fn function_declaration(&mut self) -> ParserResult<statement::Function> {
         macro_rules! expect_identifier {
             ($parser: ident) => {{
                 expect_token_with_param!(
@@ -137,7 +144,7 @@ impl<'a> Parser<'a> {
         expect_token!(self, TokenType::LeftBrace, LeftBrace);
         let body = self.parse_block()?;
 
-        Ok(Statement::FunctionDeclaration {
+        Ok(statement::Function {
             name,
             parameters,
             body,
