@@ -1,6 +1,8 @@
 mod interpreter;
 mod resolver;
 
+use resolver::Resolver;
+
 use crate::interpreter::{Interpreter, InterpreterError};
 use std::io::{Cursor, Read, Result as IOResult};
 use std::path::Path;
@@ -51,6 +53,12 @@ fn run(source: &str, interpreter: &Interpreter) {
         }
     };
 
+    let mut resolver = Resolver::new(interpreter);
+
+    if let Err(e) = resolver.resolve_statements(&statements) {
+        static_error(&format!("{e}"));
+    }
+
     if let Err(e) = interpreter.interpret(&statements) {
         runtime_error(e);
     }
@@ -89,6 +97,11 @@ fn run_prompt(interpreter: &Interpreter) -> IOResult<()> {
 
 fn error(line: usize, message: &str) {
     report(line, "", message);
+}
+
+fn static_error(error: &str) {
+    *HAD_ERROR.lock().unwrap() = true;
+    println!("Resolver error: {error}");
 }
 
 fn runtime_error(error: InterpreterError) {

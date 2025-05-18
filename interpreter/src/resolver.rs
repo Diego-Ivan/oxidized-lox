@@ -1,16 +1,26 @@
-use crate::interpreter::Interpreter;
+pub(crate) use crate::interpreter::Interpreter;
 use std::collections::HashMap;
 use syntax::{Expression, Statement};
 
 #[derive(thiserror::Error, Debug)]
 pub enum ResolverError {
-    #[error("Variable cannot be read before it is initialized")]
-    NotInitialized,
+    #[error("Variable {0} cannot be read before it is initialized")]
+    NotInitialized(String),
+    #[error("Variable {0} is already declared in the current scope")]
+    VariableAlreadyExists(String),
+    #[error("Return statement has been used outside function")]
+    ReturnNotInFunction,
+}
+
+enum FunctionType {
+    None,
+    Function,
 }
 
 pub struct Resolver<'i> {
     interpreter: &'i Interpreter,
     scopes: Vec<HashMap<String, bool>>,
+    function_type: FunctionType,
 }
 
 impl<'i> Resolver<'i> {
@@ -18,6 +28,7 @@ impl<'i> Resolver<'i> {
         Self {
             interpreter,
             scopes: Vec::new(),
+            function_type: FunctionType::None,
         }
     }
 
@@ -29,23 +40,25 @@ impl<'i> Resolver<'i> {
         self.scopes.pop();
     }
 
-    pub fn resolve_statements(&mut self, statements: &[Statement]) {
+    pub fn resolve_statements(&mut self, statements: &[Statement]) -> Result<(), ResolverError> {
         for statement in statements {
-            self.resolve_statement(statement);
+            self.resolve_statement(statement)?;
         }
+
+        Ok(())
     }
 
     fn resolve_statement(&mut self, statement: &Statement) -> Result<(), ResolverError> {
         match statement {
             Statement::Block(block) => {
                 self.begin_scope();
-                self.resolve_statements(block);
+                self.resolve_statements(block)?;
                 self.end_scope();
                 Ok(())
             }
 
             Statement::VariableDeclaration { name, initializer } => {
-                self.declare_variable(name);
+                self.declare_variable(name)?;
 
                 if let Some(initializer) = initializer {
                     self.resolve_expression(initializer)?;
@@ -61,11 +74,10 @@ impl<'i> Resolver<'i> {
                 parameters,
                 body,
             } => {
-                self.declare_variable(name);
+                self.declare_variable(name)?;
                 self.define(name);
 
-                self.resolve_function(name, parameters, body);
-                Ok(())
+                self.resolve_function(parameters, body)
             }
             Statement::If {
                 condition,
@@ -84,38 +96,36 @@ impl<'i> Resolver<'i> {
             Statement::While { condition, body } => self
                 .resolve_expression(condition)
                 .and(self.resolve_statement(body)),
-            Statement::For {
-                initializer,
-                condition,
-                increment,
-                body,
-            } => todo!(),
+            Statement::For { .. } => todo!(),
             Statement::Return {
-                keyword,
+                keyword: _,
                 expression,
             } => {
+                if !matches!(self.function_type, FunctionType::Function) {
+                    return Err(ResolverError::ReturnNotInFunction);
+                }
+
                 if let Some(expression) = expression {
                     self.resolve_expression(expression)?;
                 }
 
                 Ok(())
             }
-            Statement::Break { keyword } => Ok(()),
-            Statement::Continue { keyword } => Ok(()),
+            // TODO: Add support for checking that this is inside a loop
+            Statement::Break { .. } => Ok(()),
+            Statement::Continue { .. } => Ok(()),
         }
     }
 
     fn resolve_expression(&mut self, expr: &Expression) -> Result<(), ResolverError> {
         match expr {
             Expression::Var { name, token: _ } => {
-                let scope = match self.scopes.last() {
-                    Some(scope) => scope,
-                    None => return Err(ResolverError::NotInitialized),
+                match self.scopes.last() {
+                    Some(scope) if matches!(scope.get(name), Some(false)) => {
+                        return Err(ResolverError::NotInitialized(String::from(name)));
+                    }
+                    Some(_) | None => self.resolve_local(expr, name),
                 };
-
-                if !matches!(scope.get(name), Some(true)) {
-                    return Err(ResolverError::NotInitialized);
-                }
 
                 Ok(())
             }
@@ -155,23 +165,31 @@ impl<'i> Resolver<'i> {
         }
     }
 
-    fn resolve_function(&mut self, name: &str, parameters: &[syntax::Token], body: &[Statement]) {
+    fn resolve_function(
+        &mut self,
+        parameters: &[syntax::Token],
+        body: &[Statement],
+    ) -> Result<(), ResolverError> {
+        self.function_type = FunctionType::Function;
         self.begin_scope();
 
         for param in parameters {
-            self.declare_variable(param.lexeme());
+            self.declare_variable(param.lexeme())?;
             self.define(param.lexeme());
         }
 
-        self.resolve_statements(body);
+        self.resolve_statements(body)?;
 
         self.end_scope();
+        self.function_type = FunctionType::None;
+
+        Ok(())
     }
 
     fn resolve_local(&self, expr: &Expression, name: &str) {
         for (idx, scope) in self.scopes.iter().rev().enumerate() {
             if scope.contains_key(name) {
-                self.interpreter.resolve(self.scopes.len() - 1 - idx);
+                self.interpreter.resolve(expr, idx);
                 return;
             }
         }
@@ -186,12 +204,18 @@ impl<'i> Resolver<'i> {
         scope.insert(String::from(name), true);
     }
 
-    fn declare_variable(&mut self, name: &str) {
+    fn declare_variable(&mut self, name: &str) -> Result<(), ResolverError> {
         let scope = match self.scopes.last_mut() {
             Some(scope) => scope,
-            None => return,
+            None => return Ok(()),
         };
 
+        if scope.contains_key(name) {
+            return Err(ResolverError::VariableAlreadyExists(String::from(name)));
+        }
+
         scope.insert(String::from(name), false);
+
+        Ok(())
     }
 }

@@ -8,6 +8,7 @@ use crate::interpreter::callable::{Callable, NativeFunc};
 use crate::interpreter::environment::Environment;
 pub use error::*;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use syntax::Expression;
 use syntax::statement::Block;
@@ -20,10 +21,11 @@ type RcEnvironment = Rc<RefCell<Environment>>;
 pub struct Interpreter {
     globals: RcEnvironment,
     environment_stack: RefCell<Vec<RcEnvironment>>,
+    locals: RefCell<HashMap<Expression, usize>>,
 }
 
 #[must_use]
-pub enum ControlFlow {
+enum ControlFlow {
     Normal,
     BreakLoop,
     ContinueLoop,
@@ -37,6 +39,7 @@ impl Interpreter {
         let interpreter = Self {
             environment_stack: RefCell::new(vec![globals.clone()]),
             globals,
+            locals: RefCell::new(HashMap::new()),
         };
         interpreter.load_native_functions();
 
@@ -48,6 +51,11 @@ impl Interpreter {
             let _ = self.execute_statement(statement, false)?;
         }
         Ok(())
+    }
+
+    pub fn resolve(&self, expression: &Expression, depth: usize) {
+        let mut locals = self.locals.borrow_mut();
+        locals.insert(expression.clone(), depth);
     }
 
     fn execute_statement(
@@ -218,7 +226,7 @@ impl Interpreter {
         match expression {
             Expression::True => Ok(LoxValue::Boolean(true)),
             Expression::False => Ok(LoxValue::Boolean(false)),
-            Expression::Number(num) => Ok(LoxValue::Number(*num)),
+            Expression::Number(num) => Ok(LoxValue::Number(**num)),
             Expression::String(str) => Ok(LoxValue::String(Rc::new(str.to_string()))),
             Expression::Nil => Ok(LoxValue::Nil),
             Expression::Grouping(expr) => self.evaluate(expr),
@@ -229,9 +237,7 @@ impl Interpreter {
                 right,
             } => self.evaluate_binary(left, operator, right),
             Expression::Var { name, token } => {
-                let env_stack = self.environment_stack.borrow_mut();
-                let env = env_stack.last().unwrap().borrow();
-                let value = match env.get(name) {
+                let value = match self.lookup_variable(name, expression) {
                     Some(value) => value,
                     None => {
                         return Err(InterpreterError {
@@ -243,14 +249,25 @@ impl Interpreter {
                 Ok(value.clone())
             }
             Expression::Assignment { name, value, token } => {
-                let value = self.evaluate(value)?;
-                let env_stack = self.environment_stack.borrow_mut();
-                let mut env = env_stack.last().unwrap().borrow_mut();
+                let distance = match self.locals.borrow().get(value) {
+                    Some(distance) => *distance,
+                    None => todo!(),
+                };
 
-                if !env.set(name.clone(), value.clone()) {
+                let last_env = {
+                    let env_stack = self.environment_stack.borrow();
+                    env_stack.last().unwrap().clone()
+                };
+
+                let value = self.evaluate(value)?;
+
+                if !last_env
+                    .borrow_mut()
+                    .assign_at(name, value.clone(), distance)
+                {
                     return Err(InterpreterError {
-                        error_type: InterpreterErrorType::UndefinedVariable(name.clone()),
                         token: token.clone(),
+                        error_type: InterpreterErrorType::UndefinedVariable(String::from(name)),
                     });
                 }
                 Ok(value)
@@ -305,6 +322,20 @@ impl Interpreter {
                     }
                 }
             }
+        }
+    }
+
+    fn lookup_variable(&self, name: &str, expression: &Expression) -> Option<LoxValue> {
+        let locals = self.locals.borrow();
+        match locals.get(expression) {
+            Some(distance) => {
+                let last_env = {
+                    let env_stack = self.environment_stack.borrow();
+                    env_stack.last().unwrap().clone()
+                };
+                last_env.borrow().get_at(name, *distance)
+            }
+            None => self.globals.borrow().get(name),
         }
     }
 
