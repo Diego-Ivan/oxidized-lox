@@ -74,6 +74,17 @@ macro_rules! expect_token_with_param {
     }};
 }
 
+macro_rules! expect_identifier {
+    ($parser: ident) => {{
+        expect_token_with_param!(
+            $parser,
+            TokenType::Identifier(_),
+            Identifier,
+            String::from("undefined")
+        )
+    }};
+}
+
 impl<'a> Parser<'a> {
     pub fn new(tokens: &'a [Token]) -> Self {
         Self { tokens, current: 0 }
@@ -104,17 +115,6 @@ impl<'a> Parser<'a> {
     }
 
     fn class_declaration(&mut self) -> ParserResult<Statement> {
-        macro_rules! expect_identifier {
-            ($parser: ident) => {{
-                expect_token_with_param!(
-                    $parser,
-                    TokenType::Identifier(_),
-                    Identifier,
-                    String::from("undefined")
-                )
-            }};
-        }
-
         let name = expect_identifier!(self).lexeme().to_string();
         expect_token!(self, TokenType::LeftBrace, LeftBrace);
 
@@ -130,17 +130,6 @@ impl<'a> Parser<'a> {
     }
 
     fn function_declaration(&mut self) -> ParserResult<statement::Function> {
-        macro_rules! expect_identifier {
-            ($parser: ident) => {{
-                expect_token_with_param!(
-                    $parser,
-                    TokenType::Identifier(_),
-                    Identifier,
-                    String::from("undefined")
-                )
-            }};
-        }
-
         let name = expect_identifier!(self).lexeme().to_string();
 
         expect_token!(self, TokenType::LeftParen, LeftParen);
@@ -512,10 +501,17 @@ impl<'a> Parser<'a> {
     fn call(&mut self) -> ParserResult<Expression> {
         let mut expr = self.primary()?;
         loop {
-            if !match_token!(self, TokenType::LeftParen) {
+            if match_token!(self, TokenType::LeftParen) {
+                expr = self.finish_call(expr)?;
+            } else if match_token!(self, TokenType::Dot) {
+                let identifier = expect_identifier!(self);
+                expr = Expression::Get {
+                    expression: Box::new(expr),
+                    token: identifier.clone(),
+                };
+            } else {
                 break;
             }
-            expr = self.finish_call(expr)?;
         }
 
         Ok(expr)

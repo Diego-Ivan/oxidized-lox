@@ -1,4 +1,5 @@
 use crate::interpreter::callable::Callable;
+use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
 
@@ -20,6 +21,7 @@ pub struct Class {
 #[derive(Debug, Clone)]
 pub struct Instance {
     class: Rc<Class>,
+    fields: HashMap<String, LoxValue>,
 }
 
 impl LoxValue {
@@ -63,7 +65,18 @@ impl Display for Class {
 
 impl Instance {
     pub fn new(class: Rc<Class>) -> Self {
-        Self { class }
+        Self {
+            class,
+            fields: HashMap::new(),
+        }
+    }
+
+    pub fn get(&self, key: &str) -> Option<LoxValue> {
+        self.fields.get(key).cloned()
+    }
+
+    pub fn class_name(&self) -> &str {
+        &self.class.name
     }
 }
 

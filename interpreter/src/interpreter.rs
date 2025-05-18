@@ -352,6 +352,28 @@ impl Interpreter {
                     }
                 }
             }
+            Expression::Get { expression, token } => {
+                let result = self.evaluate(expression)?;
+
+                match result {
+                    LoxValue::Instance(instance) => match instance.get(token.lexeme()) {
+                        Some(value) => Ok(value),
+                        None => interpreter_error!(
+                            InterpreterErrorType::NotAProperty {
+                                class_name: instance.class_name().to_string(),
+                                field: token.lexeme().to_string()
+                            },
+                            token.clone()
+                        ),
+                    },
+                    _ => {
+                        interpreter_error!(
+                            InterpreterErrorType::InvalidInstance(token.lexeme().to_string()),
+                            token.clone()
+                        )
+                    }
+                }
+            }
         }
     }
 

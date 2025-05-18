@@ -17,6 +17,8 @@ pub enum InterpreterErrorType {
     WrongArity { original: usize, user: usize },
     Native(NativeError),
     NotInLoop,
+    InvalidInstance(String),
+    NotAProperty { class_name: String, field: String },
 }
 
 pub type InterpreterResult<T> = Result<T, Box<InterpreterError>>;
@@ -66,6 +68,15 @@ impl Display for InterpreterError {
             }
             InterpreterErrorType::NotInLoop => {
                 format!("Used {} statement outside a loop", self.token.lexeme())
+            }
+            InterpreterErrorType::InvalidInstance(name) => {
+                format!("Identifier {name} is not an instance")
+            }
+            InterpreterErrorType::NotAProperty {
+                class_name: instance,
+                field,
+            } => {
+                format!("Class instance {instance} does not have a property called '{field}'")
             }
         };
 

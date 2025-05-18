@@ -32,6 +32,10 @@ pub enum Expression {
         paren: Token,
         args: Vec<Expression>,
     },
+    Get {
+        expression: Box<Expression>,
+        token: Token,
+    },
 
     // Literals
     True,
@@ -91,6 +95,9 @@ impl Debug for Expression {
                 args,
             } => {
                 write!(f, "call (callee: {callee:?}, args: {args:?})")
+            }
+            Expression::Get { expression, token } => {
+                write!(f, "get(expr: {expression:?}, name: {})", token.lexeme())
             }
         }
     }

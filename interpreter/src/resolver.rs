@@ -158,6 +158,7 @@ impl<'i> Resolver<'i> {
 
                 Ok(())
             }
+            Expression::Get { expression, .. } => self.resolve_expression(expression),
             Expression::True
             | Expression::False
             | Expression::Number(_)
