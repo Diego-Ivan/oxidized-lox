@@ -287,6 +287,7 @@ impl Interpreter {
                 };
                 Ok(value.clone())
             }
+            Expression::This { keyword } => todo!(),
             Expression::Assignment { name, value, token } => {
                 let distance = match self.locals.borrow().get(value) {
                     Some(distance) => *distance,

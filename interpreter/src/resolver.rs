@@ -71,11 +71,18 @@ impl<'i> Resolver<'i> {
             Statement::ClassDeclaration { name, methods } => {
                 self.declare(name)?;
                 self.define(name);
+                self.begin_scope();
+
+                if let Some(scope) = self.scopes.last_mut() {
+                    scope.insert(String::from("this"), true);
+                }
 
                 for method in methods {
                     self.function_type = FunctionType::Method;
                     self.resolve_function(&method.parameters, &method.body)?;
                 }
+
+                self.end_scope();
 
                 Ok(())
             }
@@ -138,6 +145,10 @@ impl<'i> Resolver<'i> {
                     Some(_) | None => self.resolve_local(expr, name),
                 };
 
+                Ok(())
+            }
+            Expression::This { keyword } => {
+                self.resolve_local(expr, keyword.lexeme());
                 Ok(())
             }
             Expression::Binary { left, right, .. } => self

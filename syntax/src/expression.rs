@@ -41,6 +41,9 @@ pub enum Expression {
         object: Box<Expression>,
         value: Box<Expression>,
     },
+    This {
+        keyword: Token,
+    },
 
     // Literals
     True,
@@ -111,6 +114,7 @@ impl Debug for Expression {
             } => {
                 write!(f, "set(name: {name}, object: {object:?}, value: {value:?})")
             }
+            Expression::This { .. } => write!(f, "this"),
         }
     }
 }

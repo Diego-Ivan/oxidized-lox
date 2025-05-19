@@ -571,6 +571,12 @@ impl<'a> Parser<'a> {
                 self.advance();
                 Ok(expr)
             }
+            TokenType::This => {
+                self.advance();
+                Ok(Expression::This {
+                    keyword: self.previous().unwrap().clone(),
+                })
+            }
             TokenType::Identifier(name) => {
                 let expression = Expression::Var {
                     name: String::from(name),
