@@ -1,7 +1,7 @@
 use crate::interpreter::value::LoxValue;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 #[derive(Debug)]
@@ -54,6 +54,10 @@ impl Environment {
     }
 
     pub fn get_at(&self, name: &str, distance: usize) -> Option<LoxValue> {
+        if distance == 0 {
+            return self.values.get(name).cloned();
+        }
+
         match self.ancestor(distance) {
             Some(env) => env.borrow().values.get(name).cloned(),
             None => self.values.get(name).cloned(),
