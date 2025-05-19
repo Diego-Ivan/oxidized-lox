@@ -6,6 +6,7 @@ mod value;
 
 use crate::interpreter::callable::{Callable, NativeFunc};
 use crate::interpreter::environment::Environment;
+use callable::LoxFunction;
 pub use error::*;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -14,6 +15,7 @@ use syntax::Expression;
 use syntax::statement::Block;
 pub use syntax::statement::Statement;
 use syntax::token::{Token, TokenType};
+use value::Field;
 pub use value::LoxValue;
 
 type RcEnvironment = Rc<RefCell<Environment>>;
@@ -181,12 +183,12 @@ impl Interpreter {
                     .map(|m| {
                         (
                             m.name.to_string(),
-                            Rc::new(Callable::LoxFunction {
+                            Rc::new(Callable::LoxFunction(LoxFunction {
                                 closure: environment.clone(),
                                 name: m.name.to_string(),
                                 params: m.parameters.clone(),
                                 block: m.body.clone(),
-                            }),
+                            })),
                         )
                     })
                     .collect();
@@ -206,12 +208,12 @@ impl Interpreter {
                 let env_stack = self.environment_stack.borrow();
                 let current_env = env_stack.last().unwrap();
 
-                let callable = Callable::LoxFunction {
+                let callable = Callable::LoxFunction(LoxFunction {
                     closure: current_env.clone(),
                     name: function.name.clone(),
                     params: function.parameters.clone(),
                     block: function.body.clone(),
-                };
+                });
 
                 let mut global = self.globals.borrow_mut();
                 global.define(function.name.clone(), LoxValue::Callable(Rc::new(callable)));
@@ -287,7 +289,15 @@ impl Interpreter {
                 };
                 Ok(value.clone())
             }
-            Expression::This { keyword } => todo!(),
+            Expression::This { keyword } => {
+                match self.lookup_variable(keyword.lexeme(), expression) {
+                    Some(value) => Ok(value),
+                    None => interpreter_error!(
+                        InterpreterErrorType::UndefinedVariable(keyword.lexeme().to_string()),
+                        keyword.clone()
+                    ),
+                }
+            }
             Expression::Assignment { name, value, token } => {
                 let distance = match self.locals.borrow().get(value) {
                     Some(distance) => *distance,
@@ -352,14 +362,13 @@ impl Interpreter {
                     Callable::Native { func, arity } => {
                         self.evaluate_native(paren, *arity, func, &arguments)
                     }
-                    Callable::LoxFunction {
-                        name: _,
-                        closure,
-                        params,
-                        block,
-                    } => {
-                        self.evaluate_lox_function(paren, closure.clone(), params, arguments, block)
-                    }
+                    Callable::LoxFunction(function) => self.evaluate_lox_function(
+                        paren,
+                        function.closure.clone(),
+                        &function.params,
+                        arguments,
+                        &function.block,
+                    ),
                     Callable::Constructor(class) => {
                         if !arguments.is_empty() {
                             return interpreter_error!(
@@ -380,8 +389,11 @@ impl Interpreter {
 
                 match result {
                     LoxValue::Instance(instance) => match instance.get(token.lexeme()) {
-                        Some(value) => Ok(value),
-                        None => interpreter_error!(
+                        Field::Value(value) => Ok(value),
+                        Field::Method(method) => {
+                            Ok(self.bind_method(instance.clone(), method.clone()))
+                        }
+                        Field::Undefined => interpreter_error!(
                             InterpreterErrorType::NotAProperty {
                                 class_name: instance.class_name().to_string(),
                                 field: token.lexeme().to_string()
@@ -414,6 +426,16 @@ impl Interpreter {
                     )
                 }
             }
+        }
+    }
+
+    fn bind_method(&self, instance: Rc<value::Instance>, method: Rc<Callable>) -> LoxValue {
+        if let Callable::LoxFunction(function) = &*method {
+            let bound_method = Callable::LoxFunction(function.bind(instance));
+
+            LoxValue::Callable(Rc::new(bound_method))
+        } else {
+            LoxValue::Callable(method)
         }
     }
 

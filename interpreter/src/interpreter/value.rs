@@ -26,6 +26,12 @@ pub struct Instance {
     fields: RefCell<HashMap<String, LoxValue>>,
 }
 
+pub enum Field {
+    Undefined,
+    Value(LoxValue),
+    Method(Rc<Callable>),
+}
+
 impl LoxValue {
     pub fn is_truthy(&self) -> bool {
         match self {
@@ -77,12 +83,12 @@ impl Instance {
         }
     }
 
-    pub fn get(&self, key: &str) -> Option<LoxValue> {
+    pub fn get(&self, key: &str) -> Field {
         match self.fields.borrow().get(key) {
-            Some(value) => Some(value.clone()),
+            Some(value) => Field::Value(value.clone()),
             None => match self.class.find_method(key) {
-                Some(method) => Some(LoxValue::Callable(method)),
-                None => None,
+                Some(method) => Field::Method(method),
+                None => Field::Undefined,
             },
         }
     }

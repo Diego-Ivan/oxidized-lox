@@ -10,6 +10,8 @@ pub enum ResolverError {
     VariableAlreadyExists(String),
     #[error("Return statement has been used outside function")]
     ReturnNotInFunction,
+    #[error("Invalid use of the this keyword in line {0}")]
+    InvalidThis(usize),
 }
 
 enum FunctionType {
@@ -18,10 +20,17 @@ enum FunctionType {
     Method,
 }
 
+#[derive(Clone, Copy)]
+enum ClassType {
+    None,
+    Class,
+}
+
 pub struct Resolver<'i> {
     interpreter: &'i Interpreter,
     scopes: Vec<HashMap<String, bool>>,
     function_type: FunctionType,
+    class_type: ClassType,
 }
 
 impl<'i> Resolver<'i> {
@@ -30,6 +39,7 @@ impl<'i> Resolver<'i> {
             interpreter,
             scopes: Vec::new(),
             function_type: FunctionType::None,
+            class_type: ClassType::None,
         }
     }
 
@@ -71,6 +81,9 @@ impl<'i> Resolver<'i> {
             Statement::ClassDeclaration { name, methods } => {
                 self.declare(name)?;
                 self.define(name);
+
+                let current_class = self.class_type;
+                self.class_type = ClassType::Class;
                 self.begin_scope();
 
                 if let Some(scope) = self.scopes.last_mut() {
@@ -83,6 +96,7 @@ impl<'i> Resolver<'i> {
                 }
 
                 self.end_scope();
+                self.class_type = current_class;
 
                 Ok(())
             }
@@ -148,6 +162,9 @@ impl<'i> Resolver<'i> {
                 Ok(())
             }
             Expression::This { keyword } => {
+                if !matches!(self.class_type, ClassType::Class) {
+                    return Err(ResolverError::InvalidThis(keyword.line()));
+                }
                 self.resolve_local(expr, keyword.lexeme());
                 Ok(())
             }
