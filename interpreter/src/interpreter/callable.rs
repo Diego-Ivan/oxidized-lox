@@ -14,15 +14,32 @@ pub type NativeFunc = fn(args: &[LoxValue]) -> NativeResult<LoxValue>;
 pub struct LoxFunction {
     pub closure: Rc<RefCell<Environment>>,
     pub name: String,
+    pub is_initializer: bool,
     pub params: Vec<Token>,
     pub block: Block,
 }
 
 #[derive(Clone)]
 pub enum Callable {
-    Native { func: NativeFunc, arity: usize },
+    Native {
+        func: NativeFunc,
+        arity: usize,
+    },
     LoxFunction(LoxFunction),
-    Constructor(Rc<super::value::Class>),
+    Constructor {
+        class: Rc<super::value::Class>,
+        arity: usize,
+    },
+}
+
+impl Callable {
+    pub fn arity(&self) -> usize {
+        match self {
+            Self::Native { arity, .. } => *arity,
+            Self::LoxFunction(function) => function.params.len(),
+            Self::Constructor { arity, .. } => *arity,
+        }
+    }
 }
 
 impl Debug for Callable {
@@ -30,7 +47,7 @@ impl Debug for Callable {
         match self {
             Self::Native { func: _, arity: _ } => f.write_str("<native fun>"),
             Self::LoxFunction(function) => write!(f, "<fun {}>", function.name),
-            Self::Constructor(name) => write!(f, "<constructor {name}>"),
+            Self::Constructor { class, .. } => write!(f, "<constructor {class}>"),
         }
     }
 }
@@ -43,6 +60,7 @@ impl LoxFunction {
         LoxFunction {
             closure: Rc::new(RefCell::new(environment)),
             name: self.name.to_string(),
+            is_initializer: true,
             params: self.params.clone(),
             block: self.block.clone(),
         }

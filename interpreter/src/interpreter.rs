@@ -12,7 +12,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use syntax::Expression;
-use syntax::statement::Block;
 pub use syntax::statement::Statement;
 use syntax::token::{Token, TokenType};
 use value::Field;
@@ -185,6 +184,7 @@ impl Interpreter {
                             m.name.to_string(),
                             Rc::new(Callable::LoxFunction(LoxFunction {
                                 closure: environment.clone(),
+                                is_initializer: m.name == "init",
                                 name: m.name.to_string(),
                                 params: m.parameters.clone(),
                                 block: m.body.clone(),
@@ -194,8 +194,13 @@ impl Interpreter {
                     .collect();
 
                 let class = value::Class::new(name.to_string(), methods);
+                let arity = class.find_method("init").map(|m| m.arity()).unwrap_or(0);
 
-                let constructor = Callable::Constructor(Rc::new(class));
+                let constructor = Callable::Constructor {
+                    class: Rc::new(class),
+                    arity,
+                };
+
                 environment.borrow_mut().assign_at(
                     name,
                     LoxValue::Callable(Rc::new(constructor)),
@@ -211,6 +216,7 @@ impl Interpreter {
                 let callable = Callable::LoxFunction(LoxFunction {
                     closure: current_env.clone(),
                     name: function.name.clone(),
+                    is_initializer: false,
                     params: function.parameters.clone(),
                     block: function.body.clone(),
                 });
@@ -358,31 +364,7 @@ impl Interpreter {
                     arguments.push(self.evaluate(arg)?);
                 }
 
-                match &*function {
-                    Callable::Native { func, arity } => {
-                        self.evaluate_native(paren, *arity, func, &arguments)
-                    }
-                    Callable::LoxFunction(function) => self.evaluate_lox_function(
-                        paren,
-                        function.closure.clone(),
-                        &function.params,
-                        arguments,
-                        &function.block,
-                    ),
-                    Callable::Constructor(class) => {
-                        if !arguments.is_empty() {
-                            return interpreter_error!(
-                                InterpreterErrorType::WrongArity {
-                                    original: 0,
-                                    user: arguments.len()
-                                },
-                                paren.clone()
-                            );
-                        }
-                        let instance = value::Instance::new(class.clone());
-                        Ok(LoxValue::Instance(Rc::new(instance)))
-                    }
-                }
+                self.interpret_call(function, arguments, paren)
             }
             Expression::Get { expression, token } => {
                 let result = self.evaluate(expression)?;
@@ -391,7 +373,8 @@ impl Interpreter {
                     LoxValue::Instance(instance) => match instance.get(token.lexeme()) {
                         Field::Value(value) => Ok(value),
                         Field::Method(method) => {
-                            Ok(self.bind_method(instance.clone(), method.clone()))
+                            let bound_method = self.bind_method(instance.clone(), method.clone());
+                            Ok(LoxValue::Callable(bound_method))
                         }
                         Field::Undefined => interpreter_error!(
                             InterpreterErrorType::NotAProperty {
@@ -429,13 +412,44 @@ impl Interpreter {
         }
     }
 
-    fn bind_method(&self, instance: Rc<value::Instance>, method: Rc<Callable>) -> LoxValue {
-        if let Callable::LoxFunction(function) = &*method {
-            let bound_method = Callable::LoxFunction(function.bind(instance));
+    fn interpret_call(
+        &self,
+        function: Rc<Callable>,
+        arguments: Vec<LoxValue>,
+        paren: &Token,
+    ) -> InterpreterResult<LoxValue> {
+        match &*function {
+            Callable::Native { func, arity } => {
+                self.evaluate_native(paren, *arity, func, &arguments)
+            }
+            Callable::LoxFunction(function) => {
+                self.evaluate_lox_function(paren, arguments, function)
+            }
+            Callable::Constructor { class, arity } => {
+                if *arity != arguments.len() {
+                    return interpreter_error!(
+                        InterpreterErrorType::WrongArity {
+                            original: 0,
+                            user: arguments.len()
+                        },
+                        paren.clone()
+                    );
+                }
+                let instance = Rc::new(value::Instance::new(class.clone()));
+                if let Some(initializer) = class.find_method("init") {
+                    let initializer = self.bind_method(instance.clone(), initializer);
+                    self.interpret_call(initializer, arguments, paren)?;
+                }
+                Ok(LoxValue::Instance(instance))
+            }
+        }
+    }
 
-            LoxValue::Callable(Rc::new(bound_method))
+    fn bind_method(&self, instance: Rc<value::Instance>, method: Rc<Callable>) -> Rc<Callable> {
+        if let Callable::LoxFunction(function) = &*method {
+            Rc::new(Callable::LoxFunction(function.bind(instance)))
         } else {
-            LoxValue::Callable(method)
+            method
         }
     }
 
@@ -456,17 +470,15 @@ impl Interpreter {
     fn evaluate_lox_function(
         &self,
         token: &Token,
-        closure: Rc<RefCell<Environment>>,
-        params: &[Token],
         arguments: Vec<LoxValue>,
-        block: &Block,
+        function: &LoxFunction,
     ) -> InterpreterResult<LoxValue> {
-        let mut function_env = Environment::new_enclosed(closure);
+        let mut function_env = Environment::new_enclosed(function.closure.clone());
 
-        if params.len() != arguments.len() {
+        if function.params.len() != arguments.len() {
             return interpreter_error!(
                 InterpreterErrorType::WrongArity {
-                    original: params.len(),
+                    original: function.params.len(),
                     user: arguments.len()
                 },
                 token.clone()
@@ -474,10 +486,19 @@ impl Interpreter {
         }
 
         for (i, arg) in arguments.into_iter().enumerate() {
-            function_env.define(params[i].lexeme().to_string(), arg);
+            function_env.define(function.params[i].lexeme().to_string(), arg);
         }
 
-        let value = match self.execute_block(block, Rc::new(RefCell::new(function_env)), false)? {
+        let value = match self.execute_block(
+            &function.block,
+            Rc::new(RefCell::new(function_env)),
+            false,
+        )? {
+            _ if function.is_initializer => function
+                .closure
+                .borrow()
+                .get_at("init", 0)
+                .unwrap_or(LoxValue::Nil),
             ControlFlow::Normal => LoxValue::Nil,
             ControlFlow::BreakLoop => LoxValue::Nil,
             ControlFlow::ContinueLoop => LoxValue::Nil,

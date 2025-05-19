@@ -12,12 +12,15 @@ pub enum ResolverError {
     ReturnNotInFunction,
     #[error("Invalid use of the this keyword in line {0}")]
     InvalidThis(usize),
+    #[error("Invalid use of return in an Initializer in line {0}")]
+    InvalidInitReturn(usize),
 }
 
 enum FunctionType {
     None,
     Function,
     Method,
+    Initializer,
 }
 
 #[derive(Clone, Copy)]
@@ -91,7 +94,11 @@ impl<'i> Resolver<'i> {
                 }
 
                 for method in methods {
-                    self.function_type = FunctionType::Method;
+                    self.function_type = if method.name == "init" {
+                        FunctionType::Initializer
+                    } else {
+                        FunctionType::Method
+                    };
                     self.resolve_function(&method.parameters, &method.body)?;
                 }
 
@@ -127,22 +134,26 @@ impl<'i> Resolver<'i> {
                 .and(self.resolve_statement(body)),
             Statement::For { .. } => todo!(),
             Statement::Return {
-                keyword: _,
+                keyword,
                 expression,
-            } => {
-                if !matches!(
-                    self.function_type,
-                    FunctionType::Function | FunctionType::Method
-                ) {
-                    return Err(ResolverError::ReturnNotInFunction);
-                }
+            } => match (&self.function_type, expression) {
+                /* Invalid return statement outside of a function */
+                (FunctionType::None, _) => Err(ResolverError::ReturnNotInFunction),
 
-                if let Some(expression) = expression {
-                    self.resolve_expression(expression)?;
+                /* Resolve expression following the statement */
+                (FunctionType::Method | FunctionType::Function, Some(expression)) => {
+                    self.resolve_expression(expression)
                 }
+                (FunctionType::Method | FunctionType::Function, None) => Ok(()),
 
-                Ok(())
-            }
+                /* Early return in an initializer */
+                (FunctionType::Initializer, None) => Ok(()),
+
+                /* Initializers may not return values */
+                (FunctionType::Initializer, Some(_)) => {
+                    Err(ResolverError::InvalidInitReturn(keyword.line()))
+                }
+            },
             // TODO: Add support for checking that this is inside a loop
             Statement::Break { .. } => Ok(()),
             Statement::Continue { .. } => Ok(()),
