@@ -165,18 +165,40 @@ impl Interpreter {
 
                 Ok(ControlFlow::Normal)
             }
-            Statement::ClassDeclaration { name, methods: _ } => {
+            Statement::ClassDeclaration { name, methods } => {
                 let environment = {
                     let env_stack = self.environment_stack.borrow_mut();
                     env_stack.last().unwrap().clone()
                 };
 
-                let mut environment = environment.borrow_mut();
-                environment.define(name.to_string(), LoxValue::Nil);
+                {
+                    let mut environment = environment.borrow_mut();
+                    environment.define(name.to_string(), LoxValue::Nil);
+                }
 
-                let class = value::Class::new(name.to_string());
+                let methods: HashMap<String, Rc<Callable>> = methods
+                    .iter()
+                    .map(|m| {
+                        (
+                            m.name.to_string(),
+                            Rc::new(Callable::LoxFunction {
+                                closure: environment.clone(),
+                                name: m.name.to_string(),
+                                params: m.parameters.clone(),
+                                block: m.body.clone(),
+                            }),
+                        )
+                    })
+                    .collect();
+
+                let class = value::Class::new(name.to_string(), methods);
+
                 let constructor = Callable::Constructor(Rc::new(class));
-                environment.assign_at(name, LoxValue::Callable(Rc::new(constructor)), 0);
+                environment.borrow_mut().assign_at(
+                    name,
+                    LoxValue::Callable(Rc::new(constructor)),
+                    0,
+                );
 
                 Ok(ControlFlow::Normal)
             }

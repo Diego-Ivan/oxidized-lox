@@ -368,10 +368,10 @@ impl<'a> Parser<'a> {
                     value: Box::new(value_expr),
                     token: equals.clone(),
                 }),
-                Expression::Get { token, expression } => Ok(Expression::Assignment {
-                    name: token.lexeme().to_string(),
-                    value: expression,
-                    token: equals.clone(),
+                Expression::Get { token, expression } => Ok(Expression::Set {
+                    name: token.clone(),
+                    object: expression,
+                    value: Box::new(value_expr),
                 }),
                 _ => Err(ParserError::InvalidAssignmentTarget(value_expr)),
             }

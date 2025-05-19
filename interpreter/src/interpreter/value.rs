@@ -17,6 +17,7 @@ pub enum LoxValue {
 #[derive(Debug, Clone)]
 pub struct Class {
     name: String,
+    methods: HashMap<String, Rc<Callable>>,
 }
 
 #[derive(Debug, Clone)]
@@ -53,8 +54,12 @@ impl Display for LoxValue {
 }
 
 impl Class {
-    pub fn new(name: String) -> Self {
-        Self { name }
+    pub fn new(name: String, methods: HashMap<String, Rc<Callable>>) -> Self {
+        Self { name, methods }
+    }
+
+    pub fn find_method(&self, name: &str) -> Option<Rc<Callable>> {
+        self.methods.get(name).cloned()
     }
 }
 
@@ -73,7 +78,13 @@ impl Instance {
     }
 
     pub fn get(&self, key: &str) -> Option<LoxValue> {
-        self.fields.borrow().get(key).cloned()
+        match self.fields.borrow().get(key) {
+            Some(value) => Some(value.clone()),
+            None => match self.class.find_method(key) {
+                Some(method) => Some(LoxValue::Callable(method)),
+                None => None,
+            },
+        }
     }
 
     pub fn set(&self, key: &str, value: LoxValue) {

@@ -15,6 +15,7 @@ pub enum ResolverError {
 enum FunctionType {
     None,
     Function,
+    Method,
 }
 
 pub struct Resolver<'i> {
@@ -67,9 +68,15 @@ impl<'i> Resolver<'i> {
                 self.define(name);
                 Ok(())
             }
-            Statement::ClassDeclaration { name, .. } => {
+            Statement::ClassDeclaration { name, methods } => {
                 self.declare(name)?;
                 self.define(name);
+
+                for method in methods {
+                    self.function_type = FunctionType::Method;
+                    self.resolve_function(&method.parameters, &method.body)?;
+                }
+
                 Ok(())
             }
             Statement::Expression(expression) => self.resolve_expression(expression),
@@ -102,7 +109,10 @@ impl<'i> Resolver<'i> {
                 keyword: _,
                 expression,
             } => {
-                if !matches!(self.function_type, FunctionType::Function) {
+                if !matches!(
+                    self.function_type,
+                    FunctionType::Function | FunctionType::Method
+                ) {
                     return Err(ResolverError::ReturnNotInFunction);
                 }
 
