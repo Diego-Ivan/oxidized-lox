@@ -118,6 +118,16 @@ impl<'a> Parser<'a> {
         let name = expect_identifier!(self).lexeme().to_string();
         expect_token!(self, TokenType::LeftBrace, LeftBrace);
 
+        let _super_class = if match_token!(self, TokenType::Less) {
+            let identifier = expect_identifier!(self);
+            Some(Expression::Var {
+                name: identifier.lexeme().to_string(),
+                token: identifier.clone(),
+            })
+        } else {
+            None
+        };
+
         let mut methods = Vec::new();
 
         while !check_token!(self, TokenType::RightBrace) {
@@ -574,6 +584,12 @@ impl<'a> Parser<'a> {
             TokenType::This => {
                 self.advance();
                 Ok(Expression::This {
+                    keyword: self.previous().unwrap().clone(),
+                })
+            }
+            TokenType::Super => {
+                self.advance();
+                Ok(Expression::Super {
                     keyword: self.previous().unwrap().clone(),
                 })
             }

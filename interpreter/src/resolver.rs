@@ -179,6 +179,9 @@ impl<'i> Resolver<'i> {
                 self.resolve_local(expr, keyword.lexeme());
                 Ok(())
             }
+            Expression::Super { keyword } => {
+                todo!()
+            }
             Expression::Binary { left, right, .. } => self
                 .resolve_expression(left)
                 .and(self.resolve_expression(right)),

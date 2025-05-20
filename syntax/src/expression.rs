@@ -44,6 +44,9 @@ pub enum Expression {
     This {
         keyword: Token,
     },
+    Super {
+        keyword: Token,
+    },
 
     // Literals
     True,
@@ -115,6 +118,7 @@ impl Debug for Expression {
                 write!(f, "set(name: {name}, object: {object:?}, value: {value:?})")
             }
             Expression::This { .. } => write!(f, "this"),
+            Expression::Super { .. } => write!(f, "super"),
         }
     }
 }

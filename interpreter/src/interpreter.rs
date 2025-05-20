@@ -193,7 +193,7 @@ impl Interpreter {
                     })
                     .collect();
 
-                let class = value::Class::new(name.to_string(), methods);
+                let class = value::Class::new(name.to_string(), methods, None);
                 let arity = class.find_method("init").map(|m| m.arity()).unwrap_or(0);
 
                 let constructor = Callable::Constructor {
@@ -304,6 +304,7 @@ impl Interpreter {
                     ),
                 }
             }
+            Expression::Super { keyword: _ } => todo!(),
             Expression::Assignment { name, value, token } => {
                 let distance = match self.locals.borrow().get(value) {
                     Some(distance) => *distance,

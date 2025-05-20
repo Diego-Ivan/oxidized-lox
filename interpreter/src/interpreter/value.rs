@@ -18,6 +18,7 @@ pub enum LoxValue {
 pub struct Class {
     name: String,
     methods: HashMap<String, Rc<Callable>>,
+    super_class: Option<Box<Class>>,
 }
 
 #[derive(Debug, Clone)]
@@ -60,8 +61,16 @@ impl Display for LoxValue {
 }
 
 impl Class {
-    pub fn new(name: String, methods: HashMap<String, Rc<Callable>>) -> Self {
-        Self { name, methods }
+    pub fn new(
+        name: String,
+        methods: HashMap<String, Rc<Callable>>,
+        super_class: Option<Box<Class>>,
+    ) -> Self {
+        Self {
+            name,
+            methods,
+            super_class,
+        }
     }
 
     pub fn find_method(&self, name: &str) -> Option<Rc<Callable>> {
