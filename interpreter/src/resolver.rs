@@ -162,7 +162,9 @@ impl<'i> Resolver<'i> {
 
     fn resolve_expression(&mut self, expr: &Expression) -> Result<(), ResolverError> {
         match expr {
-            Expression::Var { name, token: _ } => {
+            Expression::Var(variable) => {
+                let name = variable.token.lexeme();
+
                 match self.scopes.last() {
                     Some(scope) if matches!(scope.get(name), Some(false)) => {
                         return Err(ResolverError::NotInitialized(String::from(name)));

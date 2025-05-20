@@ -1,4 +1,4 @@
-use crate::expression::Expression;
+use crate::expression::{self, Expression};
 use crate::statement;
 use crate::statement::{Block, Statement};
 use crate::token::{Token, TokenType};
@@ -120,10 +120,9 @@ impl<'a> Parser<'a> {
 
         let _super_class = if match_token!(self, TokenType::Less) {
             let identifier = expect_identifier!(self);
-            Some(Expression::Var {
-                name: identifier.lexeme().to_string(),
+            Some(Expression::Var(expression::Variable {
                 token: identifier.clone(),
-            })
+            }))
         } else {
             None
         };
@@ -373,8 +372,8 @@ impl<'a> Parser<'a> {
             let value_expr = self.assignment()?;
 
             match expr {
-                Expression::Var { name, token: _ } => Ok(Expression::Assignment {
-                    name,
+                Expression::Var(variable) => Ok(Expression::Assignment {
+                    name: variable.token.lexeme().into(),
                     value: Box::new(value_expr),
                     token: equals.clone(),
                 }),
@@ -593,13 +592,12 @@ impl<'a> Parser<'a> {
                     keyword: self.previous().unwrap().clone(),
                 })
             }
-            TokenType::Identifier(name) => {
-                let expression = Expression::Var {
-                    name: String::from(name),
+            TokenType::Identifier(_) => {
+                let expression = expression::Variable {
                     token: self.peek().unwrap().clone(),
                 };
                 self.advance();
-                Ok(expression)
+                Ok(Expression::Var(expression))
             }
             TokenType::LeftParen => {
                 self.advance();

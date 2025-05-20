@@ -283,13 +283,14 @@ impl Interpreter {
                 operator,
                 right,
             } => self.evaluate_binary(left, operator, right),
-            Expression::Var { name, token } => {
+            Expression::Var(variable) => {
+                let name = variable.token.lexeme();
                 let value = match self.lookup_variable(name, expression) {
                     Some(value) => value,
                     None => {
                         return interpreter_error!(
                             InterpreterErrorType::UndefinedVariable(name.to_string()),
-                            token.clone()
+                            variable.token.clone()
                         );
                     }
                 };

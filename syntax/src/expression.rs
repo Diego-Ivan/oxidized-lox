@@ -2,6 +2,11 @@ use crate::token::Token;
 use std::fmt::{Debug, Formatter, Write};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
+pub struct Variable {
+    pub token: Token,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Expression {
     Binary {
         left: Box<Expression>,
@@ -10,10 +15,7 @@ pub enum Expression {
     },
     Grouping(Box<Expression>),
     Unary(Token, Box<Expression>),
-    Var {
-        name: String,
-        token: Token,
-    },
+    Var(Variable),
     Assignment {
         name: String,
         value: Box<Expression>,
@@ -88,7 +90,7 @@ impl Debug for Expression {
             } => parenthesize(f, operator.lexeme(), &[left, right]),
             Expression::Grouping(expr) => parenthesize(f, "group", &[expr]),
             Expression::Unary(token, expr) => parenthesize(f, token.lexeme(), &[expr]),
-            Expression::Var { name, token: _ } => write!(f, "Var({name})"),
+            Expression::Var(variable) => write!(f, "Var({})", variable.token.lexeme()),
             Expression::Assignment {
                 name: _,
                 value,
