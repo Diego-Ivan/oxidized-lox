@@ -1,7 +1,7 @@
 use crate::token::Token;
 use std::fmt::{Debug, Formatter, Write};
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Variable {
     pub token: Token,
 }

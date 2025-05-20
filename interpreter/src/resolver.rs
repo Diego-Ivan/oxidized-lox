@@ -14,6 +14,8 @@ pub enum ResolverError {
     InvalidThis(usize),
     #[error("Invalid use of return in an Initializer in line {0}")]
     InvalidInitReturn(usize),
+    #[error("Class {0} must not inherit itself")]
+    SelfInheritance(String),
 }
 
 enum FunctionType {
@@ -81,9 +83,23 @@ impl<'i> Resolver<'i> {
                 self.define(name);
                 Ok(())
             }
-            Statement::ClassDeclaration { name, methods } => {
+            Statement::ClassDeclaration {
+                name,
+                methods,
+                super_class,
+            } => {
                 self.declare(name)?;
                 self.define(name);
+
+                if let Some(Expression::Var(super_class)) = super_class {
+                    if super_class.token.lexeme() == name {
+                        return Err(ResolverError::SelfInheritance(name.to_string()));
+                    }
+                }
+
+                if let Some(super_class) = super_class {
+                    self.resolve_expression(super_class)?;
+                }
 
                 let current_class = self.class_type;
                 self.class_type = ClassType::Class;

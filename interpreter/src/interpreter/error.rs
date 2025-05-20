@@ -19,6 +19,7 @@ pub enum InterpreterErrorType {
     NotInLoop,
     InvalidInstance(String),
     NotAProperty { class_name: String, field: String },
+    InvalidSuperClass,
 }
 
 pub type InterpreterResult<T> = Result<T, Box<InterpreterError>>;
@@ -78,6 +79,7 @@ impl Display for InterpreterError {
             } => {
                 format!("Class instance {instance} does not have a property called '{field}'")
             }
+            InterpreterErrorType::InvalidSuperClass => String::from("Superclass must be a class."),
         };
 
         write!(f, "{err_message}\n[line {}]", self.token.line())

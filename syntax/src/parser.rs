@@ -116,9 +116,8 @@ impl<'a> Parser<'a> {
 
     fn class_declaration(&mut self) -> ParserResult<Statement> {
         let name = expect_identifier!(self).lexeme().to_string();
-        expect_token!(self, TokenType::LeftBrace, LeftBrace);
 
-        let _super_class = if match_token!(self, TokenType::Less) {
+        let super_class = if match_token!(self, TokenType::Less) {
             let identifier = expect_identifier!(self);
             Some(Expression::Var(expression::Variable {
                 token: identifier.clone(),
@@ -126,6 +125,8 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
+
+        expect_token!(self, TokenType::LeftBrace, LeftBrace);
 
         let mut methods = Vec::new();
 
@@ -135,7 +136,11 @@ impl<'a> Parser<'a> {
 
         expect_token!(self, TokenType::RightBrace, RightBrace);
 
-        Ok(Statement::ClassDeclaration { name, methods })
+        Ok(Statement::ClassDeclaration {
+            name,
+            methods,
+            super_class,
+        })
     }
 
     fn function_declaration(&mut self) -> ParserResult<statement::Function> {

@@ -18,7 +18,7 @@ pub enum LoxValue {
 pub struct Class {
     name: String,
     methods: HashMap<String, Rc<Callable>>,
-    super_class: Option<Box<Class>>,
+    super_class: Option<Rc<Class>>,
 }
 
 #[derive(Debug, Clone)]
@@ -64,7 +64,7 @@ impl Class {
     pub fn new(
         name: String,
         methods: HashMap<String, Rc<Callable>>,
-        super_class: Option<Box<Class>>,
+        super_class: Option<Rc<Class>>,
     ) -> Self {
         Self {
             name,
@@ -74,7 +74,10 @@ impl Class {
     }
 
     pub fn find_method(&self, name: &str) -> Option<Rc<Callable>> {
-        self.methods.get(name).cloned()
+        self.methods
+            .get(name)
+            .cloned()
+            .or_else(|| self.super_class.as_ref().and_then(|s| s.find_method(name)))
     }
 }
 

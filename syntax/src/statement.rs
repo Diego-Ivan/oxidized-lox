@@ -1,4 +1,4 @@
-use crate::expression::Expression;
+use crate::expression::{self, Expression};
 use crate::token::Token;
 
 pub type Block = Vec<Statement>;
@@ -38,6 +38,7 @@ pub enum Statement {
     ClassDeclaration {
         name: String,
         methods: Vec<Function>,
+        super_class: Option<Expression>,
     },
     Return {
         keyword: Token,

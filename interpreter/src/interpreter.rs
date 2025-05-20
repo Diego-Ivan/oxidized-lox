@@ -166,7 +166,16 @@ impl Interpreter {
 
                 Ok(ControlFlow::Normal)
             }
-            Statement::ClassDeclaration { name, methods } => {
+            Statement::ClassDeclaration {
+                name,
+                methods,
+                super_class,
+            } => {
+                let super_class = match super_class {
+                    Some(super_class) => Some(self.validate_superclass(super_class)?),
+                    None => None,
+                };
+
                 let environment = {
                     let env_stack = self.environment_stack.borrow_mut();
                     env_stack.last().unwrap().clone()
@@ -193,7 +202,7 @@ impl Interpreter {
                     })
                     .collect();
 
-                let class = value::Class::new(name.to_string(), methods, None);
+                let class = value::Class::new(name.to_string(), methods, super_class);
                 let arity = class.find_method("init").map(|m| m.arity()).unwrap_or(0);
 
                 let constructor = Callable::Constructor {
@@ -240,6 +249,18 @@ impl Interpreter {
             Statement::Break { keyword } | Statement::Continue { keyword } => {
                 interpreter_error!(InterpreterErrorType::NotInLoop, keyword.clone())
             }
+        }
+    }
+
+    fn validate_superclass(&self, expr: &Expression) -> InterpreterResult<Rc<value::Class>> {
+        match self.evaluate(expr)? {
+            LoxValue::Callable(callable) => match &*callable {
+                Callable::Native { .. } | Callable::LoxFunction(_) => {
+                    panic!("Super class must be a class")
+                }
+                Callable::Constructor { class, .. } => Ok(class.clone()),
+            },
+            _ => panic!("Super class must be a class"),
         }
     }
 
